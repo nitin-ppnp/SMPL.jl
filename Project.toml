@@ -1,0 +1,13 @@
+name = "SMPL"
+uuid = "582f87bb-3f4e-434f-ae83-4e6429f489ab"
+authors = ["Nitin <nitin.ppnp@gmail.com>"]
+version = "0.1.0"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
