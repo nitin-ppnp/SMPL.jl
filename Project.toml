@@ -3,6 +3,12 @@ uuid = "582f87bb-3f4e-434f-ae83-4e6429f489ab"
 authors = ["Nitin <nitin.ppnp@gmail.com>"]
 version = "0.1.0"
 
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+NPZ = "15e1cf62-19b3-5cfa-8e77-841668bca605"
+Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
+
 [compat]
 julia = "1"
 

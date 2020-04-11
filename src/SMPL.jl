@@ -1,5 +1,8 @@
 module SMPL
 
-greet() = print("Hello World!")
+include("smplfuncs.jl");
+export createSMPL;
+export smpl_lbs;
+export viz_smpl;
 
 end # module
