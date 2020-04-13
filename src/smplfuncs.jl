@@ -1,6 +1,8 @@
 using NPZ; npz=NPZ
 using LinearAlgebra
 using Debugger;
+using SharedArrays;
+using Distributed;
 
 struct SMPLdata
     v_template::Array{Float32,2}
@@ -15,12 +17,6 @@ end
 
 function createSMPL(model_path)
     model = npz.npzread(model_path)
-#     smpl = SMPL(v_template=model["v_template"],
-#                 shapedirs=model["shapedirs"],
-#                 posedirs=model["posedirs"],
-#                 J_regressor=model["J_regressor"],
-#                 parents=model["parents"],
-#                 lbs_weights=model["lbs_weights"])
     smpl = SMPLdata(model["v_template"],
                 model["shapedirs"],
                 model["posedirs"],
@@ -31,20 +27,15 @@ function createSMPL(model_path)
     return smpl
 end
 
-# function blend_shapes(betas,shape_disps)
-    
-#     return reshape(reshape(smpl.shapedirs,(6890*3,:))*betas,(6890,3,:)) 
-
-# end
 
 
-function smpl_lbs(betas::Array{Float32,1},pose::Array{Float32,1},smpl::SMPLdata,trans::Array{Float32,1}=zeros(Float32,3))
+function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},trans::Array{Float32,1}=zeros(Float32,3))
     """pose input (3x3)x24 : batch of 24 of 3x3 rotation matrices  """
     
     v_shaped = smpl.v_template + reshape(reshape(smpl.shapedirs,(6890*3,:))*betas,(6890,3))
     
     J = smpl.J_regressor*v_shaped
-    @bp
+    # @bp
     
     if size(pose,1) == 24*3
         pose = reshape(pose,(3,24))
@@ -72,8 +63,74 @@ function smpl_lbs(betas::Array{Float32,1},pose::Array{Float32,1},smpl::SMPLdata,
 end
 
 
-function smpl_lbs(betas::Array{Float32,2},pose::Array{Float32,1},smpl::SMPLdata)
-    shape_lbs(t) = smpl_lbs(t,pose,smpl)
+
+function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,1})
+    verts = SharedArray{Float32}(size(smpl.v_template)[end:-1:1]...,size(betas,2));
+    joints = SharedArray{Float32}(3,24,size(betas,2));
+    
+    @sync @distributed for i = 1:size(pose,2)
+        verts[:,:,i], joints[:,:,i] = smpl_lbs(smpl,betas[:,i],pose);
+    end
+    
+    return verts,joints 
+end
+
+function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2})
+    
+    verts = SharedArray{Float32}(size(smpl.v_template)[end:-1:1]...,size(pose,2));
+    joints = SharedArray{Float32}(3,24,size(pose,2));
+    
+    @sync @distributed for i = 1:size(pose,2)
+        verts[:,:,i], joints[:,:,i] = smpl_lbs(smpl,betas,pose[:,i]);
+    end
+    
+    return verts,joints 
+end
+
+function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},trans::Array{Float32,2})
+    # @bp
+    verts = SharedArray{Float32}(size(smpl.v_template)[end:-1:1]...,size(pose,2));
+    joints = SharedArray{Float32}(3,24,size(pose,2));
+    
+    @sync @distributed for i = 1:size(pose,2)
+        verts[:,:,i], joints[:,:,i] = smpl_lbs(smpl,betas,pose[:,i],trans[:,i]);
+    end
+    # @bp
+    return verts,joints 
+end
+    
+function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,2},trans::Array{Float32,2})
+    verts = SharedArray{Float32}(size(smpl.v_template)[end:-1:1]...,size(pose,2));
+    joints = SharedArray{Float32}(3,24,size(pose,2));
+    
+    @sync @distributed for i = 1:size(pose,2)
+        verts[:,:,i], joints[:,:,i] = smpl_lbs(smpl,betas[:,i],pose[:,i],trans[:,i]);
+    end
+    
+    return verts,joints 
+end
+
+function smpl_lbs2(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,2},trans::Array{Float32,2})
+    out = [smpl_lbs(smpl,betas[:,i],pose[:,i],trans[:,i]) for i = 1:size(pose,2)]
+    o1 = [t[1] for t in out]
+    o2 = [t[2] for t in out]
+    verts = reshape(reduce(hcat,o1),3,6890,:)
+    joints = reshape(reduce(hcat,o2),3,24,:)
+    return verts,joints 
+end
+
+function smpl_lbs2(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2})
+    pose_lbs(t) = smpl_lbs(smpl,betas,t)
+    out = mapslices(pose_lbs,pose,dims=1)
+    o1 = [t[1] for t in out]
+    o2 = [t[2] for t in out]
+    verts = reshape(reduce(hcat,o1),3,6890,:)
+    joints = reshape(reduce(hcat,o2),3,24,:)
+    return verts,joints
+end
+
+function smpl_lbs2(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,1})
+    shape_lbs(t) = smpl_lbs(smpl,t,pose)
     out = mapslices(shape_lbs,betas,dims=1)
     o1 = [t[1] for t in out]
     o2 = [t[2] for t in out]
@@ -82,34 +139,9 @@ function smpl_lbs(betas::Array{Float32,2},pose::Array{Float32,1},smpl::SMPLdata)
     return verts,joints
 end
 
-function smpl_lbs(betas::Array{Float32,1},pose::Array{Float32,2},smpl::SMPLdata)
-    pose_lbs(t) = smpl_lbs(betas,t,smpl)
-    out = mapslices(pose_lbs,pose,dims=1)
-    o1 = [t[1] for t in out]
-    o2 = [t[2] for t in out]
-    verts = reshape(reduce(hcat,o1),3,6890,:)
-    joints = reshape(reduce(hcat,o2),3,24,:)
-    return verts,joints
-end
-    
-function smpl_lbs2(betas::Array{Float32,1},pose::Array{Float32,2},smpl::SMPLdata)
-    bsize = size(pose,2)
-    verts = zeros(Float32,3,6890,bsize)
-    joints = zeros(Float32,3,24,bsize)
-    for i=1:bsize
-        verts[:,:,i],joints[:,:,i] = smpl_lbs(betas,pose[:,i],smpl)
-    end
-#     pose_lbs(t) = smpl_lbs(betas,t,smpl)
-#     out = mapslices(pose_lbs,pose,dims=1)
-#     o1 = [t[1] for t in out]
-#     o2 = [t[2] for t in out]
-#     verts = reshape(reduce(hcat,o1),3,6890,:)
-#     joints = reshape(reduce(hcat,o2),3,24,:)
-    return verts,joints
-end
 
-function smpl_lbs(betas::Array{Float32,2},pose::Array{Float32,2},smpl::SMPLdata)
-    out = [smpl_lbs(betas[:,i],pose[:,i],smpl) for i = 1:size(pose,2)]
+function smpl_lbs2(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},trans::Array{Float32,2})
+    out = [smpl_lbs(smpl,betas,pose[:,i],trans[:,i]) for i = 1:size(pose,2)]
     o1 = [t[1] for t in out]
     o2 = [t[2] for t in out]
     verts = reshape(reduce(hcat,o1),3,6890,:)
@@ -154,21 +186,6 @@ function rigid_transform(rot_mats,joints,parents)
     
 end
 
-# function lbs(betas,pose,smpl::SMPLdata)
-    
-#     batch_size = max(size(betas,ndims(betas)),size(pose,ndims(pose)))
-    
-#     b_shapes = blend_shapes(betas,smpl.shapedirs)
-    
-#     v_shaped = [smpl.v_template[i,j]+b_shapes[i,j,k] for i=1:size(b_shapes,1),j=1:size(b_shapes,2),k=1:size(b_shapes,3)]
-        
-#     J = vertices2joints(smpl.J_regressor,v_shaped)
-    
-#     rot_mats = cat([rodrigues(pose[:,i]) for i = 1:size(pose,2)]...,3)
-    
-#    pose_feature =  
-        
-# end
 
 
 function vertices2joints(J_regressor,vertices)
@@ -177,23 +194,6 @@ function vertices2joints(J_regressor,vertices)
     
     end
 
-# function batch_rodrigues(rot_vecs,eps=1e-8)
-    
-#     batch_size = size(rot_vecs,ndims(rot_vecs))
-    
-#     angle = sqrt.(sum((rot_vecs+eps).^2,dims=1))
-#     angle = reshape(angle,(1,ndims(angle)))
-#     rot_dir = rot_vecs ./ angle
-    
-#     co = cos.(angle)
-#     si = sin.(angle)
-    
-#     rx,ry,rz = rot_dir[1,:],rot_dir[2,:],rot_dir[3,:]
-#     k = 
-    
-
-
-# end
 
 function rodrigues(rot_vec,eps=1.0f-8)
     
@@ -225,17 +225,20 @@ end
 ########################## Viz ###########################
 using Makie
 
-function viz_smpl(betas::Array{Float32,1},pose::Array{Float32,1},smpl::SMPLdata;kwargs...)
-    verts,J = smpl_lbs(betas,pose,smpl)
+function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1};kwargs...)
+    verts,J = smpl_lbs(smpl,betas,pose)
     scene = Makie.mesh(verts',smpl.f;kwargs...)
     return scene
 end
 
-function viz_smpl(betas::Array{Float32,2},pose::Array{Float32,1},smpl::SMPLdata;tsleep=1/10,kwargs...)
-    verts,J = smpl_lbs(betas,pose,smpl)
+function viz_smpl(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,1};tsleep=1/10,kwargs...)
+    verts,J = smpl_lbs(smpl,betas,pose,smpl)
     
     vert = Node(verts[:,:,1]')
     msh = Makie.mesh(vert,smpl.f;kwargs...)
+    msh[Axis][:showaxis] = (false,false,false);
+    # msh[Axis][:showgrid] = (false,true,false);
+    # msh[Axis][:showticks] = (false,false,false);
     display(msh)
     for i=1:size(verts,3)
         push!(vert,verts[:,:,i]')
@@ -243,11 +246,14 @@ function viz_smpl(betas::Array{Float32,2},pose::Array{Float32,1},smpl::SMPLdata;
     end
 end
 
-function viz_smpl(betas::Array{Float32,1},pose::Array{Float32,2},smpl::SMPLdata;tsleep=1/10,kwargs...)
-    verts,J = smpl_lbs(betas,pose,smpl)
+function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2};tsleep=1/10,kwargs...)
+    verts,J = smpl_lbs(smpl,betas,pose)
     
     vert = Node(verts[:,:,1]')
     msh = Makie.mesh(vert,smpl.f;kwargs...)
+    msh[Axis][:showaxis] = (false,false,false);
+    msh[Axis][:showgrid] = (false,true,false);
+    # msh[Axis][:showticks] = (false,false,false);
     display(msh)
     for i=1:size(verts,3)
         push!(vert,verts[:,:,i]')
@@ -255,11 +261,29 @@ function viz_smpl(betas::Array{Float32,1},pose::Array{Float32,2},smpl::SMPLdata;
     end
 end
 
-function viz_smpl(betas::Array{Float32,2},pose::Array{Float32,2},smpl::SMPLdata;tsleep=1/10,kwargs...)
-    verts,J = smpl_lbs(betas,pose,smpl)
+function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},trans::Array{Float32,2};tsleep=1/10,kwargs...)
+    verts,J = smpl_lbs(smpl,betas,pose,trans)
+    @bp
+    vert = Node(verts[:,:,1]')
+    msh = Makie.mesh(vert,smpl.f;kwargs...)
+    msh[Axis][:showaxis] = (false,false,false);
+    # msh[Axis][:showgrid] = (false,true,false);
+    # msh[Axis][:showticks] = (false,false,false);
+    display(msh)
+    for i=1:size(verts,3)
+        push!(vert,verts[:,:,i]')
+        sleep(tsleep)
+    end
+end
+
+function viz_smpl(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,2};tsleep=1/10,kwargs...)
+    verts,J = smpl_lbs(smpl,betas,pose)
     
     vert = Node(verts[:,:,1]')
     msh = Makie.mesh(vert,smpl.f;kwargs...)
+    msh[Axis][:showaxis] = (false,false,false);
+    msh[Axis][:showgrid] = (false,true,false);
+    # msh[Axis][:showticks] = (false,false,false);
     display(msh)
     for i=1:size(verts,3)
         push!(vert,verts[:,:,i]')
