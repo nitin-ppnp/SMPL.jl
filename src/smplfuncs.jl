@@ -3,26 +3,47 @@ using LinearAlgebra
 using Debugger;
 using SharedArrays;
 using Distributed;
+using PyCall;
+pk = pyimport("pickle");
 
 struct SMPLdata
     v_template::Array{Float32,2}
     shapedirs::Array{Float32,3}
     posedirs::Array{Float32,2}
     J_regressor::Array{Float32,2}
-    parents::Array{Int64,1}
+    parents::Array{Int32,1}
     lbs_weights::Array{Float32,2}
     f::Array{UInt32,2}
 end
 
 
+
 function createSMPL(model_path)
-    model = npz.npzread(model_path)
-    smpl = SMPLdata(model["v_template"],
-                model["shapedirs"],
-                model["posedirs"],
-                model["J_regressor"],
-                model["parents"],
-                model["lbs_weights"],
+    """
+    """
+    py"""
+    import pickle as pk
+    import numpy as np
+    def unpickle(pth):
+        model = pk.load(open(pth,"rb"),encoding="latin1")
+        model["v_template"] = np.array(model["v_template"])
+        model["shapedirs"] = np.array(model["shapedirs"])
+        model["posedirs"] = np.array(model["posedirs"]).reshape(-1,207).T
+        model["J_regressor"] = np.array(model["J_regressor"].toarray())
+        model["kintree_table"] = np.array(model["kintree_table"])
+        model["kintree_table"][0,0] = 0
+        model["weights"] = np.array(model["weights"])
+        model["f"] = np.array(model["f"])
+        return model"""
+    
+    model = py"unpickle"(model_path);
+
+    smpl = SMPLdata(Float32.(model["v_template"]),
+                Float32.(model["shapedirs"]),
+                Float32.(model["posedirs"]),
+                Float32.(model["J_regressor"]),
+                Float32.(model["kintree_table"][1,:]),
+                Float32.(model["weights"]),
                 model["f"].+1)        # python to julia indexing
     return smpl
 end
