@@ -7,6 +7,13 @@ Since `PyCall` is used for loading the official SMPL model .pkl file, the python
 2. chumpy (`pip install chumpy`)
 3. Pickle
 
+## Using the package
 ```julia
 ]add https://github.com/nitin-ppnp/SMPL.jl
+```
+- Download the SMPL model files from the SMPL website https://smpl.is.tue.mpg.de/ and place them in the `models` folder of the repository.
+
+- run the following code to visualize the zero pose and shape.
+```julia
+
 ```

@@ -55,7 +55,7 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},
     v_shaped = smpl.v_template + reshape(reshape(smpl.shapedirs,(6890*3,:))*betas,(6890,3))
     
     J = smpl.J_regressor*v_shaped
-    # @bp
+    
     
     if size(pose,1) == 24*3
         pose = reshape(pose,(3,24))
@@ -108,14 +108,14 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2})
 end
 
 function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},trans::Array{Float32,2})
-    # @bp
+    
     verts = SharedArray{Float32}(size(smpl.v_template)[end:-1:1]...,size(pose,2));
     joints = SharedArray{Float32}(3,24,size(pose,2));
     
     @sync @distributed for i = 1:size(pose,2)
         verts[:,:,i], joints[:,:,i] = smpl_lbs(smpl,betas,pose[:,i],trans[:,i]);
     end
-    # @bp
+    
     return verts,joints 
 end
     
@@ -283,7 +283,6 @@ end
 
 function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},trans::Array{Float32,2};tsleep=1/10,kwargs...)
     verts,J = smpl_lbs(smpl,betas,pose,trans)
-    @bp
     vert = Node(verts[:,:,1]')
     msh = Makie.mesh(vert,smpl.f;kwargs...)
     msh[Axis][:showaxis] = (false,false,false);
