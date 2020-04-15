@@ -1,3 +1,5 @@
+__precompile__
+
 module SMPL
 
 include("smplfuncs.jl");
