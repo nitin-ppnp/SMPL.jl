@@ -11,9 +11,13 @@ Since `PyCall` is used for loading the official SMPL model .pkl file, the python
 ```julia
 ]add https://github.com/nitin-ppnp/SMPL.jl
 ```
-- Download the SMPL model files from the SMPL website https://smpl.is.tue.mpg.de/ and place them in the `models` folder of the repository.
+- Download the SMPL model files from the SMPL website https://smpl.is.tue.mpg.de/
 
 - run the following code to visualize the zero pose and shape.
 ```julia
-
+using SMPL;
+# create SMPL model
+smpl = createSMPL("path/to/the/SMPL/model/.pkl/file");
+# visualize zero pose and shape
+viz_smpl(smpl,zeros(Float32,10),zeros(Float32,72),color=:turquoise)
 ```
