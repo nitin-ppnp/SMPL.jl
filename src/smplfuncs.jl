@@ -251,7 +251,7 @@ function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1};
     return scene
 end
 
-function viz_smpl(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,1};tsleep=1/10,kwargs...)
+function viz_smpl(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,1};tsleep=1/10,record=false,recordFile="smplRecord.mp4",kwargs...)
     verts,J = smpl_lbs(smpl,betas,pose,smpl)
     
     vert = Node(verts[:,:,1]')
@@ -260,13 +260,20 @@ function viz_smpl(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,1};
     # msh[Axis][:showgrid] = (false,true,false);
     # msh[Axis][:showticks] = (false,false,false);
     display(msh)
-    for i=1:size(verts,3)
-        push!(vert,verts[:,:,i]')
-        sleep(tsleep)
+    if record
+        Makie.record(msh,recordFile,1:size(verts,3)) do i
+            push!(vert,verts[:,:,i]')
+            sleep(tsleep)
+        end
+    else
+        for i=1:size(verts,3)
+            push!(vert,verts[:,:,i]')
+            sleep(tsleep)
+        end
     end
 end
 
-function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2};tsleep=1/10,kwargs...)
+function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2};tsleep=1/10,record=false,recordFile="smplRecord.mp4",kwargs...)
     verts,J = smpl_lbs(smpl,betas,pose)
     
     vert = Node(verts[:,:,1]')
@@ -275,13 +282,20 @@ function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2};
     msh[Axis][:showgrid] = (false,true,false);
     # msh[Axis][:showticks] = (false,false,false);
     display(msh)
-    for i=1:size(verts,3)
-        push!(vert,verts[:,:,i]')
-        sleep(tsleep)
+    if record
+        Makie.record(msh,recordFile,1:size(verts,3)) do i
+            push!(vert,verts[:,:,i]')
+            sleep(tsleep)
+        end
+    else
+        for i=1:size(verts,3)
+            push!(vert,verts[:,:,i]')
+            sleep(tsleep)
+        end
     end
 end
 
-function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},trans::Array{Float32,2};tsleep=1/10,kwargs...)
+function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},trans::Array{Float32,2};tsleep=1/10,record=false,recordFile="smplRecord.mp4",kwargs...)
     verts,J = smpl_lbs(smpl,betas,pose,trans)
     vert = Node(verts[:,:,1]')
     msh = Makie.mesh(vert,smpl.f;kwargs...)
@@ -289,13 +303,20 @@ function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},
     # msh[Axis][:showgrid] = (false,true,false);
     # msh[Axis][:showticks] = (false,false,false);
     display(msh)
-    for i=1:size(verts,3)
-        push!(vert,verts[:,:,i]')
-        sleep(tsleep)
+    if record
+        Makie.record(msh,recordFile,1:size(verts,3)) do i
+            push!(vert,verts[:,:,i]')
+            sleep(tsleep)
+        end
+    else
+        for i=1:size(verts,3)
+            push!(vert,verts[:,:,i]')
+            sleep(tsleep)
+        end
     end
 end
 
-function viz_smpl(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,2};tsleep=1/10,kwargs...)
+function viz_smpl(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,2};tsleep=1/10,record=false,recordFile="smplRecord.mp4",kwargs...)
     verts,J = smpl_lbs(smpl,betas,pose)
     
     vert = Node(verts[:,:,1]')
@@ -304,9 +325,16 @@ function viz_smpl(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,2};
     msh[Axis][:showgrid] = (false,true,false);
     # msh[Axis][:showticks] = (false,false,false);
     display(msh)
-    for i=1:size(verts,3)
-        push!(vert,verts[:,:,i]')
-        sleep(tsleep)
+    if record
+        Makie.record(msh,recordFile,1:size(verts,3)) do i
+            push!(vert,verts[:,:,i]')
+            sleep(tsleep)
+        end
+    else
+        for i=1:size(verts,3)
+            push!(vert,verts[:,:,i]')
+            sleep(tsleep)
+        end
     end
 end
 
