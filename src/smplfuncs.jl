@@ -10,7 +10,7 @@ struct SMPLdata
     shapedirs::Array{Float32,3}
     posedirs::Array{Float32,2}
     J_regressor::Array{Float32,2}
-    parents::Array{Int32,1}
+    parents::Array{UInt32,1}
     lbs_weights::Array{Float32,2}
     f::Array{UInt32,2}
 end
@@ -41,7 +41,7 @@ function createSMPL(model_path)
                 Float32.(model["shapedirs"]),
                 Float32.(model["posedirs"]),
                 Float32.(model["J_regressor"]),
-                Float32.(model["kintree_table"][1,:]),
+                UInt32.(model["kintree_table"][1,:]),
                 Float32.(model["weights"]),
                 model["f"].+1)        # python to julia indexing
     return smpl
