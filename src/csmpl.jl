@@ -1,7 +1,5 @@
 module SMPLMod
 
-# using Pkg
-# Pkg.activate(".")
 
 using NPZ
 using LinearAlgebra
@@ -202,7 +200,7 @@ end
 # end
 
 Base.@ccallable function CSMPL_v_template(v_template::Array{Float32,2})::Array{Float32,2}
-    smpl = createSMPL("D:\\julia\\projects\\smpl\\smpl_new.npz");
+    smpl = createSMPL(ENV["SMPLPATH"]);
     # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
     # print(size(verts))
     # @show joints
@@ -210,7 +208,7 @@ Base.@ccallable function CSMPL_v_template(v_template::Array{Float32,2})::Array{F
     return v_template;
 end
 Base.@ccallable function CSMPL_shapedirs(shapedirs::Array{Float32,3})::Array{Float32,3}
-    smpl = createSMPL("D:\\julia\\projects\\smpl\\smpl_new.npz");
+    smpl = createSMPL(ENV["SMPLPATH"]);
     # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
     # print(size(verts))
     # @show joints
@@ -218,7 +216,7 @@ Base.@ccallable function CSMPL_shapedirs(shapedirs::Array{Float32,3})::Array{Flo
     return shapedirs;
 end
 Base.@ccallable function CSMPL_posedirs(posedirs::Array{Float32,2})::Array{Float32,2}
-    smpl = createSMPL("D:\\julia\\projects\\smpl\\smpl_new.npz");
+    smpl = createSMPL(ENV["SMPLPATH"]);
     # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
     # print(size(verts))
     # @show joints
@@ -226,7 +224,7 @@ Base.@ccallable function CSMPL_posedirs(posedirs::Array{Float32,2})::Array{Float
     return posedirs;
 end
 Base.@ccallable function CSMPL_J_regressor(J_regressor::Array{Float32,2})::Array{Float32,2}
-    smpl = createSMPL("D:\\julia\\projects\\smpl\\smpl_new.npz");
+    smpl = createSMPL(ENV["SMPLPATH"]);
     # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
     # print(size(verts))
     # @show joints
@@ -234,7 +232,7 @@ Base.@ccallable function CSMPL_J_regressor(J_regressor::Array{Float32,2})::Array
     return J_regressor;
 end
 Base.@ccallable function CSMPL_parents(parents::Array{UInt32,1})::Array{UInt32,1}
-    smpl = createSMPL("D:\\julia\\projects\\smpl\\smpl_new.npz");
+    smpl = createSMPL(ENV["SMPLPATH"]);
     # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
     # print(size(verts))
     # @show joints
@@ -242,7 +240,7 @@ Base.@ccallable function CSMPL_parents(parents::Array{UInt32,1})::Array{UInt32,1
     return parents;
 end
 Base.@ccallable function CSMPL_lbs_weights(lbs_weights::Array{Float32,2})::Array{Float32,2}
-    smpl = createSMPL("D:\\julia\\projects\\smpl\\smpl_new.npz");
+    smpl = createSMPL(ENV["SMPLPATH"]);
     # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
     # print(size(verts))
     # @show joints
@@ -250,7 +248,7 @@ Base.@ccallable function CSMPL_lbs_weights(lbs_weights::Array{Float32,2})::Array
     return lbs_weights;
 end
 Base.@ccallable function CSMPL_f(f::Array{UInt32,2})::Array{UInt32,2}
-    smpl = createSMPL("D:\\julia\\projects\\smpl\\smpl_new.npz");
+    smpl = createSMPL(ENV["SMPLPATH"]);
     # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
     # print(size(verts))
     # @show joints
@@ -261,7 +259,7 @@ Base.@ccallable function test(test::Array{Float32,2})::Array{Float32,2}
     return reshape(reinterpret(Float32,test),(3,6890));
 end
 Base.@ccallable function CSMPL()::Any
-    smpl = createSMPL("D:\\julia\\projects\\smpl\\smpl_new.npz");
+    smpl = createSMPL(ENV["SMPLPATH"]);
     # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
     # print(size(verts))
     # @show joints
@@ -331,7 +329,7 @@ end
 
 
 #g++ program.c -o main -lSMPLMod -ljulia -ID:\\julia\\julia-1.1.1\\include -ID:\\julia\\julia-1.1.1\\include\\julia -LD:\\julia\\julia-1.1.1\\lib -LD:\\julia\\projects\\smpl\\builddir
-smpl = createSMPL("D:\\julia\\projects\\smpl\\smpl_new.npz");
+smpl = createSMPL(ENV["SMPLPATH"]);
 CSMPL_LBS(smpl.v_template,smpl.shapedirs,smpl.posedirs,smpl.J_regressor,smpl.parents,smpl.lbs_weights,zeros(Float32,72),zeros(Float32,10),zeros(Float32,3),zeros(Float32,3,6890));
 CSMPL_LBS(smpl.v_template,smpl.shapedirs,smpl.posedirs,smpl.J_regressor,smpl.parents,smpl.lbs_weights,zeros(Float32,72),zeros(Float32,10),zeros(Float32,3),zeros(Float32,3,6890));
 

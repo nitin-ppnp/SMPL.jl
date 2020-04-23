@@ -1,5 +1,5 @@
-julia --startup-file=no --trace-compile=smpl_precompile.jl SMPLMod.jl
+julia --startup-file=no --trace-compile=smpl_precompile.jl src/csmpl.jl
 
-julia --startup-file=no -J"D:\\julia\\julia-1.1.1\\lib\\julia\\sys.dll" --output-o sysSMPL.o create_SMPLimage.jl
+julia --startup-file=no --output-o sysSMPL.o create_SMPLimage.jl
 
 gcc -shared -o SMPLMod.dll -Wl,--whole-archive sysSMPL.o -Wl,--no-whole-archive -L"D:\\julia\\julia-1.1.1\\bin" -ljulia -Wl,--export-all-symbols

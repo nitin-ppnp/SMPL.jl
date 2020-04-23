@@ -4,7 +4,7 @@ Base.reinit_stdio()
 
 
 @eval Module() begin
-    Base.include(@__MODULE__, "SMPLMod.jl")
+    Base.include(@__MODULE__, "csmpl.jl")
     for (pkgid, mod) in Base.loaded_modules
         if !(pkgid.name in ("Main", "Core", "Base"))
             eval(@__MODULE__, :(const $(Symbol(mod)) = $mod))

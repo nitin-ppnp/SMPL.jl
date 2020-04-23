@@ -3,6 +3,7 @@
 // Standard headers
 #include <string.h>
 #include <stdint.h>
+#include <errno.h>
 #include <iostream>
 
 #ifdef JULIA_DEFINE_FAST_TLS // only available in Julia v0.7 and above
