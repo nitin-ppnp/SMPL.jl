@@ -81,7 +81,8 @@ int main(int argc, char *argv[])
 	// jl_options.image_file = JULIAC_PROGRAM_LIBNAME;
 	// julia_init(JL_IMAGE_JULIA_HOME);
     // "D:\\julia\\projects\\smpl\\builddir\\SMPLMod.dll"
-	jl_init_with_image__threading(NULL,"D:\\julia\\projects\\smpl\\builddir\\SMPLMod.dll");
+	char* csmpl_path(getenv("CSMPL_PATH"))
+	jl_init_with_image__threading(NULL,csmpl_path);
 	// // Initialize Core.ARGS with the full argv.
 	jl_set_ARGS(argc, argv);
 
@@ -118,17 +119,6 @@ int main(int argc, char *argv[])
 	std::fill_n(shape_buf,10,0);
 	std::fill_n(trans_buf,3,0);
 	std::fill_n(verts_buf,6890*3,0);
-	// float* v_template_buf = (float*)malloc(sizeof(float)*(6890*3));
-	// float* shapedirs_buf = (float*)malloc(sizeof(float)*(6890*3*10));
-	// float* posedirs_buf = (float*)malloc(sizeof(float)*(207*20670));
-	// float* J_regressor_buf = (float*)malloc(sizeof(float)*(24*6890));
-	// unsigned int* parents_buf = (unsigned int*)malloc(sizeof(unsigned int)*(24));
-	// float* lbs_weights_buf = (float*)malloc(sizeof(float)*(6890*24));
-	// unsigned int* f_buf = (unsigned int*)malloc(sizeof(unsigned int)*(13776*3));
-	// float* pose_buf = (float*)malloc(sizeof(float)*(72));
-	// float* shape_buf = (float*)malloc(sizeof(float)*(10));
-	// float* trans_buf = (float*)malloc(sizeof(float)*(3));
-	// float* verts_buf = (float*)malloc(sizeof(float)*(6890*3));
 
 
 	jl_value_t* jl_fl32_1_arr = jl_apply_array_type((jl_value_t*)jl_float32_type, 1);
@@ -158,8 +148,6 @@ int main(int argc, char *argv[])
 	jl_array_t* smpl_parents = CSMPL_parents(parents);
 	jl_array_t* smpl_f = CSMPL_f(f);
 
-	// JL_GC_PUSH6(&smpl_v_template,&smpl_shapedirs,&smpl_posedirs,&smpl_J_regressor,&smpl_lbs_weights,&smpl_parents);
-    //jl_array_t* tst = (jl_array_t*)test(smpl_v_template);
 	jl_gc_enable(1);
     
 	for (int i=0;i<10;i++)
