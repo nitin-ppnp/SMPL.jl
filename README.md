@@ -65,7 +65,7 @@ buildSMPL.bat
 ```
 This will create a build directory which contains all the needed shared library including **csmpl.dll**.
 
-5. Check if everything is working by building the sample program **program.cpp** included in the repo. First, set the env variable `CSMPL_LIB_PATH` to the absolute path of the newly built **csmpl.dll**. Then, include the build directory in **LD_LIBRARY_PATH**. Afterwards build the **program.cpp**.
+5. Check if everything is working by building the sample program **program.cpp** included in the repo. First, set the env variable `CSMPL_LIB_PATH` to the absolute path of the newly built **csmpl.dll**. Afterwards build the **program.cpp**.
 ```
 set CSMPL_LIB_PATH={absolute path to the file csmpl.dll}
 
