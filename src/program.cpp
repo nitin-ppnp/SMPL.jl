@@ -3,7 +3,7 @@
 // Standard headers
 #include <string.h>
 #include <stdint.h>
-#include <errno.h>
+// #include <errno.h>
 #include <iostream>
 
 #ifdef JULIA_DEFINE_FAST_TLS // only available in Julia v0.7 and above
@@ -81,8 +81,9 @@ int main(int argc, char *argv[])
 	// jl_options.image_file = JULIAC_PROGRAM_LIBNAME;
 	// julia_init(JL_IMAGE_JULIA_HOME);
     // "D:\\julia\\projects\\smpl\\builddir\\SMPLMod.dll"
-	char* csmpl_path(getenv("CSMPL_PATH"))
-	jl_init_with_image__threading(NULL,csmpl_path);
+	char* csmpl_lib_path(getenv("CSMPL_LIB_PATH"));
+
+	jl_init_with_image__threading(NULL,csmpl_lib_path);
 	// // Initialize Core.ARGS with the full argv.
 	jl_set_ARGS(argc, argv);
 
