@@ -1,12 +1,7 @@
 # CSMPL (compile SMPL.jl as shared library to use in C code)
 
 ## Follow these steps to compile 
-1. Get official julia (v1.1.1) from https://julialang.org/downloads/oldreleases/ and open the julia executable to start Julia REPL. Execute the following commands
-```julia
-import Pkg;
-Pkg.add("LinearAlgebra");
-Pkg.add("NPZ");
-```
+1. Get official julia (v1.4.1 used here) from https://julialang.org/downloads/oldreleases/ and open the julia executable to start Julia REPL. Execute the following commands
 
 
 2. Get this repository and switch to branch CSMPL

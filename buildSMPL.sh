@@ -1,3 +1,6 @@
+
+$JULIA_DIR/bin/julia src/pkg_install.jl
+
 cd src
 
 echo "creating precompile statements ..."
