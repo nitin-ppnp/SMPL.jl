@@ -1,5 +1,8 @@
 # SMPL
 Julia implementation of Skinned Multi-Person Linear model (SMPL). It is based on the pytorch implementation https://github.com/vchoutas/smplx
+
+## To use SMPL as a shared library, checkout the CSMPL branch
+
 # Install
 ## Python Dependencies
 Since `PyCall` is used for loading the official SMPL model .pkl file, the python environment should have following dependencies installed. 
