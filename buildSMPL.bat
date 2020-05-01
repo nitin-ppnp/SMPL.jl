@@ -18,11 +18,11 @@ del smpl_precompile.jl
 
 del sysSMPL.o
 
-mkdir ..\build
+mkdir ..\smplbuild
 
-move csmpl.dll ..\build
+move csmpl.dll ..\smplbuild
 
 cd ..
 
-copy %JULIA_DIR%\bin\*.dll build
-copy %JULIA_DIR%\lib\julia\* build
+copy %JULIA_DIR%\bin\*.dll smplbuild
+copy %JULIA_DIR%\lib\julia\* smplbuild

@@ -17,11 +17,11 @@ rm smpl_precompile.jl
 
 rm sysSMPL.o
 
-mkdir ../build
+mkdir ../smplbuild
 
-mv libcsmpl.so ../build
+mv libcsmpl.so ../smplbuild
 
 cd ..
 
-cp $JULIA_DIR/lib/lib* build
-cp $JULIA_DIR/lib/julia/* build
+cp $JULIA_DIR/lib/lib* smplbuild
+cp $JULIA_DIR/lib/julia/* smplbuild

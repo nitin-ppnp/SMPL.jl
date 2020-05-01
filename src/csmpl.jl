@@ -20,14 +20,14 @@ end
 function createSMPL(model_path::String)
     model = NPZ.npzread(model_path)
     parents = zeros(UInt32,24);
-    parents[2:end] = model["parents"][2:end];
+    parents[2:end] = model["kintree_table"][1,2:end];
     f = reshape(model["f"]',(3,:));
     smpl = SMPL(model["v_template"],
                 model["shapedirs"],
                 model["posedirs"],
                 model["J_regressor"],
                 parents,
-                model["lbs_weights"],
+                model["weights"],
                 zeros(Float32,10),
                 zeros(Float32,72),
                 zeros(Float32,3),
