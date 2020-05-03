@@ -1,6 +1,8 @@
 # SMPL
 Julia implementation of Skinned Multi-Person Linear model (SMPL). It is based on the pytorch implementation https://github.com/vchoutas/smplx
 
+![](resources/smpl.gif)
+
 ## To use SMPL as a shared library, checkout the CSMPL branch
 
 

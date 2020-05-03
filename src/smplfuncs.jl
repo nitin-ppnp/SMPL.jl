@@ -240,18 +240,18 @@ function viz_smpl(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,1};
     
     vert = Node(verts[:,:,1]')
     msh = Makie.mesh(vert,smpl.f;kwargs...)
-    msh[Axis][:showaxis] = (false,false,false);
+    # msh[Axis][:showaxis] = (false,false,false);
     # msh[Axis][:showgrid] = (false,true,false);
     # msh[Axis][:showticks] = (false,false,false);
     display(msh)
     if record
         Makie.record(msh,recordFile,1:size(verts,3)) do i
-            push!(vert,verts[:,:,i]')
+            vert[] = verts[:,:,i]'
             sleep(tsleep)
         end
     else
         for i=1:size(verts,3)
-            push!(vert,verts[:,:,i]')
+            vert[] = verts[:,:,i]'
             sleep(tsleep)
         end
     end
@@ -262,18 +262,18 @@ function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2};
     
     vert = Node(verts[:,:,1]')
     msh = Makie.mesh(vert,smpl.f;kwargs...)
-    msh[Axis][:showaxis] = (false,false,false);
-    msh[Axis][:showgrid] = (false,true,false);
+    # msh[Axis][:showaxis] = (false,false,false);
+    # msh[Axis][:showgrid] = (false,true,false);
     # msh[Axis][:showticks] = (false,false,false);
     display(msh)
     if record
         Makie.record(msh,recordFile,1:size(verts,3)) do i
-            push!(vert,verts[:,:,i]')
+            vert[] = verts[:,:,i]'
             sleep(tsleep)
         end
     else
         for i=1:size(verts,3)
-            push!(vert,verts[:,:,i]')
+            vert[] = verts[:,:,i]'
             sleep(tsleep)
         end
     end
@@ -283,18 +283,18 @@ function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},
     verts,J = smpl_lbs(smpl,betas,pose,trans)
     vert = Node(verts[:,:,1]')
     msh = Makie.mesh(vert,smpl.f;kwargs...)
-    msh[Axis][:showaxis] = (false,false,false);
+    # msh[Axis][:showaxis] = (false,false,false);
     # msh[Axis][:showgrid] = (false,true,false);
     # msh[Axis][:showticks] = (false,false,false);
     display(msh)
     if record
         Makie.record(msh,recordFile,1:size(verts,3)) do i
-            push!(vert,verts[:,:,i]')
+            vert[] = verts[:,:,i]'
             sleep(tsleep)
         end
     else
         for i=1:size(verts,3)
-            push!(vert,verts[:,:,i]')
+            vert[] = verts[:,:,i]'
             sleep(tsleep)
         end
     end
@@ -305,18 +305,18 @@ function viz_smpl(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,2};
     
     vert = Node(verts[:,:,1]')
     msh = Makie.mesh(vert,smpl.f;kwargs...)
-    msh[Axis][:showaxis] = (false,false,false);
-    msh[Axis][:showgrid] = (false,true,false);
+    # msh[Axis][:showaxis] = (false,false,false);
+    # msh[Axis][:showgrid] = (false,true,false);
     # msh[Axis][:showticks] = (false,false,false);
     display(msh)
     if record
         Makie.record(msh,recordFile,1:size(verts,3)) do i
-            push!(vert,verts[:,:,i]')
+            vert[] = verts[:,:,i]'
             sleep(tsleep)
         end
     else
         for i=1:size(verts,3)
-            push!(vert,verts[:,:,i]')
+            vert[] = verts[:,:,i]'
             sleep(tsleep)
         end
     end
