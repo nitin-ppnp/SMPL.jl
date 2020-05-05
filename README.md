@@ -46,7 +46,7 @@ g++ src/program.cpp -o main.out -lcsmpl -ljulia -L"./smplbuild" -I"$JULIA_DIR/in
 
 **On Windows**
 
-GCC is needed to build the shared library. We use MinGW shell on windows. Get MinGW shell and execute the following commands.
+GCC is needed to build the shared library. We use [MinGW](https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win32/Personal%20Builds/mingw-builds/installer/mingw-w64-install.exe) shell on windows. Get MinGW shell and execute the following commands.
 
 3. Set the environment variable `JULIA_DIR` as path to julia directory
 ```
