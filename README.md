@@ -68,7 +68,7 @@ This will create a build directory named smplbuild, which contains all the neede
 ```
 set CSMPL_LIB_PATH={absolute path to the file csmpl.dll}
 
-g++ src\program.cpp -o main.exe -lcsmpl -ljulia -L".\\build" -I"%JULIA_DIR%\\include\\julia"
+g++ src\program.cpp -o main.exe -lcsmpl -ljulia -L".\\smplbuild" -I"%JULIA_DIR%\\include\\julia"
 
 move main.exe smplbuild             
 
