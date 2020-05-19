@@ -2,6 +2,8 @@ using NPZ; npz=NPZ
 using LinearAlgebra
 using SharedArrays;
 using Distributed;
+using Flux;
+using Zygote;
 
 struct SMPLdata
     v_template::Array{Float32,2}
@@ -60,7 +62,9 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},
     T = reshape(reshape(A,(:,24))*smpl.lbs_weights',(4,4,:))
     
     v_posed_homo = vcat(v_posed',ones(Float32,1,6890))
-    v_homo = reduce(hcat,[T[:,:,i]*v_posed_homo[:,i] for i =1:6890])
+    # temp = [T[:,:,i]*v_posed_homo[:,i] for i =1:6890];
+    # v_homo = reduce(hcat,temp);
+    v_homo = dropdims(batched_mul(T,v_posed_homo[:,[CartesianIndex()],:]);dims=2);
     verts = v_homo[1:3,:]
     return verts.+trans[:,[CartesianIndex()]], J_transformed.+trans[:,[CartesianIndex()]]
         
@@ -161,30 +165,52 @@ end
 #     end
 # end
 
+# function get_transforms(transforms_mat,parents)
+#     transforms = bufferfrom(zeros(Float32,size(transforms_mat)))
+
+#     for i=2:size(parents)[1]
+#         transforms[:,:,i] = transforms[:,:,parents[i]] * transforms_mat[:,:,i]
+#     end
+# end
+
 
 function rigid_transform(rot_mats,joints,parents)
     
-    rel_joints = copy(joints)
-    rel_joints[:,2:end] -= joints[:,parents[2:end]]
+    rel_joints1 = joints[:,1]
+    # rel_joints[:,2:end] -= joints[:,parents[2:end]]
+    rel_joints = hcat(rel_joints1,joints[:,2:end]-joints[:,parents[2:end]])
     
     transforms_mat = cat([vcat(hcat(rot_mats[:,:,i],rel_joints[:,i]),[0 0 0 1]) for i = 1:size(rot_mats)[3]]...,dims=3)
     
-    transforms = zeros(Float32,size(transforms_mat))
-    transforms[:,:,1] = transforms_mat[:,:,1]
+    transf = Dict()
+    transf[1] = transforms_mat[:,:,1]
     
+    # for i=2:size(parents)[1]
+    #     transforms[:,:,i] = transforms[:,:,parents[i]] * transforms_mat[:,:,i]
+    # end
+    buf = Zygote.Buffer(zeros(Float32,size(transforms_mat)),size(transforms_mat))
     for i=2:size(parents)[1]
-        transforms[:,:,i] = transforms[:,:,parents[i]] * transforms_mat[:,:,i]
+        transf[i] = transf[parents[i]] * transforms_mat[:,:,i]
+        buf[:,:,i] = transf[i]
     end
+
+    transforms = copy(buf)
+    # transforms = cat(transf...,dims=3)
+
     
     posed_joints = transforms[1:3,4,:]
 
     
     joints_homo = vcat(joints,zeros(Float32,1,size(joints)[2]))
+
+    init_bone = hcat(zeros(Float32,4,3,24),batched_mul(transforms,joints_homo[:,[CartesianIndex()],:]))
     
-    init_bone = cat([hcat(zeros(Float32,4,3),transforms[:,:,i]*joints_homo[:,i]) for i=1:size(parents)[1]]...,dims=3)
+    # temp = [hcat(zeros(Float32,4,3),transforms[:,:,i]*joints_homo[:,i]) for i=1:size(parents)[1]]
+    # init_bone = cat(temp...,dims=3)
     
     
     rel_transforms = transforms - init_bone
+
         
     return posed_joints, rel_transforms
     
