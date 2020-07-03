@@ -3,3 +3,4 @@
 /dev/
 smplbuild
 data
+*.npz

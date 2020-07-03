@@ -4,13 +4,13 @@ using SharedArrays;
 using Distributed;
 
 struct SMPLdata
-    v_template::Array{Float32,2}
-    shapedirs::Array{Float32,3}
-    posedirs::Array{Float32,2}
-    J_regressor::Array{Float32,2}
-    parents::Array{UInt32,1}
-    lbs_weights::Array{Float32,2}
-    f::Array{UInt32,2}
+    v_template::AbstractArray{Float32,2}
+    shapedirs::AbstractArray{Float32,3}
+    posedirs::AbstractArray{Float32,2}
+    J_regressor::AbstractArray{Float32,2}
+    parents::AbstractArray{UInt32,1}
+    lbs_weights::AbstractArray{Float32,2}
+    f::AbstractArray{UInt32,2}
 end
 
 
@@ -33,7 +33,7 @@ end
 
 
 
-function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},trans::Array{Float32,1}=zeros(Float32,3))
+function smpl_lbs(smpl::SMPLdata,betas::AbstractArray{Float32,1},pose::AbstractArray{Float32,1},trans::AbstractArray{Float32,1}=zeros(Float32,3))
     """pose input (3x3)x24 : batch of 24 of 3x3 rotation matrices  """
     
     v_shaped = smpl.v_template + reshape(reshape(smpl.shapedirs,(6890*3,:))*betas,(6890,3))
@@ -68,7 +68,7 @@ end
 
 
 
-function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,1})
+function smpl_lbs(smpl::SMPLdata,betas::AbstractArray{Float32,2},pose::AbstractArray{Float32,1})
     verts = SharedArray{Float32}(size(smpl.v_template)[end:-1:1]...,size(betas,2));
     joints = SharedArray{Float32}(3,24,size(betas,2));
     
@@ -79,7 +79,7 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,1})
     return verts,joints 
 end
 
-function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2})
+function smpl_lbs(smpl::SMPLdata,betas::AbstractArray{Float32,1},pose::AbstractArray{Float32,2})
     
     verts = SharedArray{Float32}(size(smpl.v_template)[end:-1:1]...,size(pose,2));
     joints = SharedArray{Float32}(3,24,size(pose,2));
@@ -91,7 +91,7 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2})
     return verts,joints 
 end
 
-function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},trans::Array{Float32,2})
+function smpl_lbs(smpl::SMPLdata,betas::AbstractArray{Float32,1},pose::AbstractArray{Float32,2},trans::AbstractArray{Float32,2})
     
     verts = SharedArray{Float32}(size(smpl.v_template)[end:-1:1]...,size(pose,2));
     joints = SharedArray{Float32}(3,24,size(pose,2));
@@ -103,7 +103,7 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},
     return verts,joints 
 end
     
-function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,2},trans::Array{Float32,2})
+function smpl_lbs(smpl::SMPLdata,betas::AbstractArray{Float32,2},pose::AbstractArray{Float32,2},trans::AbstractArray{Float32,2})
     verts = SharedArray{Float32}(size(smpl.v_template)[end:-1:1]...,size(pose,2));
     joints = SharedArray{Float32}(3,24,size(pose,2));
     
@@ -114,7 +114,7 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,2},
     return verts,joints 
 end
 
-function smpl_lbs2(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,2},trans::Array{Float32,2})
+function smpl_lbs2(smpl::SMPLdata,betas::AbstractArray{Float32,2},pose::AbstractArray{Float32,2},trans::AbstractArray{Float32,2})
     out = [smpl_lbs(smpl,betas[:,i],pose[:,i],trans[:,i]) for i = 1:size(pose,2)]
     o1 = [t[1] for t in out]
     o2 = [t[2] for t in out]
@@ -123,7 +123,7 @@ function smpl_lbs2(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,2}
     return verts,joints 
 end
 
-function smpl_lbs2(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2})
+function smpl_lbs2(smpl::SMPLdata,betas::AbstractArray{Float32,1},pose::AbstractArray{Float32,2})
     pose_lbs(t) = smpl_lbs(smpl,betas,t)
     out = mapslices(pose_lbs,pose,dims=1)
     o1 = [t[1] for t in out]
@@ -133,7 +133,7 @@ function smpl_lbs2(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2}
     return verts,joints
 end
 
-function smpl_lbs2(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,1})
+function smpl_lbs2(smpl::SMPLdata,betas::AbstractArray{Float32,2},pose::AbstractArray{Float32,1})
     shape_lbs(t) = smpl_lbs(smpl,t,pose)
     out = mapslices(shape_lbs,betas,dims=1)
     o1 = [t[1] for t in out]
@@ -144,7 +144,7 @@ function smpl_lbs2(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,1}
 end
 
 
-function smpl_lbs2(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},trans::Array{Float32,2})
+function smpl_lbs2(smpl::SMPLdata,betas::AbstractArray{Float32,1},pose::AbstractArray{Float32,2},trans::AbstractArray{Float32,2})
     out = [smpl_lbs(smpl,betas,pose[:,i],trans[:,i]) for i = 1:size(pose,2)]
     o1 = [t[1] for t in out]
     o2 = [t[2] for t in out]
@@ -216,7 +216,7 @@ end
 
 # smpl = createSMPL("/is/sg2/nsaini/aerial-pose-tracker_rel/aeropose/torchSMPL/smpl_m.npz");
 
-# function zygtest(pose::Array{Float32,1})
+# function zygtest(pose::AbstractArray{Float32,1})
     
     
 #     a,b = lbs(zeros(Float32,10),pose,smpl);
@@ -229,13 +229,13 @@ end
 ########################## Viz ###########################
 using Makie
 
-function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1};kwargs...)
+function viz_smpl(smpl::SMPLdata,betas::AbstractArray{Float32,1},pose::AbstractArray{Float32,1};kwargs...)
     verts,J = smpl_lbs(smpl,betas,pose)
     scene = Makie.mesh(verts',smpl.f;kwargs...)
     return scene
 end
 
-function viz_smpl(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,1};tsleep=1/10,record=false,recordFile="smplRecord.mp4",kwargs...)
+function viz_smpl(smpl::SMPLdata,betas::AbstractArray{Float32,2},pose::AbstractArray{Float32,1};tsleep=1/10,record=false,recordFile="smplRecord.mp4",kwargs...)
     verts,J = smpl_lbs(smpl,betas,pose,smpl)
     
     vert = Node(verts[:,:,1]')
@@ -257,7 +257,7 @@ function viz_smpl(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,1};
     end
 end
 
-function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2};tsleep=1/10,record=false,recordFile="smplRecord.mp4",kwargs...)
+function viz_smpl(smpl::SMPLdata,betas::AbstractArray{Float32,1},pose::AbstractArray{Float32,2};tsleep=1/10,record=false,recordFile="smplRecord.mp4",kwargs...)
     verts,J = smpl_lbs(smpl,betas,pose)
     
     vert = Node(verts[:,:,1]')
@@ -279,7 +279,7 @@ function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2};
     end
 end
 
-function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},trans::Array{Float32,2};tsleep=1/10,record=false,recordFile="smplRecord.mp4",kwargs...)
+function viz_smpl(smpl::SMPLdata,betas::AbstractArray{Float32,1},pose::AbstractArray{Float32,2},trans::AbstractArray{Float32,2};tsleep=1/10,record=false,recordFile="smplRecord.mp4",kwargs...)
     verts,J = smpl_lbs(smpl,betas,pose,trans)
     vert = Node(verts[:,:,1]')
     msh = Makie.mesh(vert,smpl.f;kwargs...)
@@ -300,7 +300,7 @@ function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},
     end
 end
 
-function viz_smpl(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,2};tsleep=1/10,record=false,recordFile="smplRecord.mp4",kwargs...)
+function viz_smpl(smpl::SMPLdata,betas::AbstractArray{Float32,2},pose::AbstractArray{Float32,2};tsleep=1/10,record=false,recordFile="smplRecord.mp4",kwargs...)
     verts,J = smpl_lbs(smpl,betas,pose)
     
     vert = Node(verts[:,:,1]')
