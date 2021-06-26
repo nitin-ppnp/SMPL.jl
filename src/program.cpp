@@ -52,6 +52,9 @@ extern "C" {
     extern jl_array_t* CSMPL_lbs_weights(jl_array_t*);
     extern jl_array_t* CSMPL_f(jl_array_t*);
     //extern jl_array_t* test(jl_value_t*);
+	extern jl_array_t* CSMPL_get_normals(jl_value_t*,
+										jl_value_t*,
+										jl_value_t*);
     extern jl_value_t* CSMPL_LBS(jl_value_t*,
 								jl_value_t*,
 								jl_value_t*,
@@ -116,10 +119,12 @@ int main(int argc, char *argv[])
 	float* shape_buf = new float[10];
 	float* trans_buf = new float[3];
 	float* verts_buf = new float[6890*3];
+	float* verts_normals_buf = new float[6890*3];
 	std::fill_n(pose_buf,72,0);
 	std::fill_n(shape_buf,10,0);
 	std::fill_n(trans_buf,3,0);
 	std::fill_n(verts_buf,6890*3,0);
+	std::fill_n(verts_normals_buf,6890*3,0);
 
 
 	jl_value_t* jl_fl32_1_arr = jl_apply_array_type((jl_value_t*)jl_float32_type, 1);
@@ -139,6 +144,7 @@ int main(int argc, char *argv[])
 	jl_array_t* shape = jl_ptr_to_array_1d(jl_fl32_1_arr, shape_buf, 10, 0);
 	jl_array_t* trans = jl_ptr_to_array_1d(jl_fl32_1_arr, trans_buf, 3, 0);
 	jl_array_t* smpl_verts = jl_ptr_to_array(jl_fl32_2_arr, verts_buf, (jl_value_t*)jl_eval_string("(3,6890)"), 0);
+	jl_array_t* verts_normals = jl_ptr_to_array(jl_fl32_2_arr, verts_normals_buf, (jl_value_t*)jl_eval_string("(3,6890)"), 0);
 
 	jl_gc_enable(0);
     jl_array_t* smpl_v_template = CSMPL_v_template(v_template);
@@ -150,27 +156,30 @@ int main(int argc, char *argv[])
 	jl_array_t* smpl_f = CSMPL_f(f);
 
 	jl_gc_enable(1);
+
+	std::cout << "asffffffffffffsfasfffffasfafafs" << std::endl;
     
 	for (int i=0;i<10;i++)
     {
-        std::cout << verts_buf[i] << std::endl;
+        std::cout << verts_normals_buf[i] << std::endl;
     }
-
+	
 	Timer tmr;
     tmr.reset();
 	jl_gc_enable(0);
     jl_array_t* verts = (jl_array_t*)CSMPL_LBS((jl_value_t*)v_template, (jl_value_t*)shapedirs, (jl_value_t*)posedirs, (jl_value_t*)J_regressor, 
 	(jl_value_t*)parents, (jl_value_t*)lbs_weights,(jl_value_t*)pose,(jl_value_t*)shape,(jl_value_t*)trans,(jl_value_t*)smpl_verts);
+	jl_array_t* normals = (jl_array_t*)CSMPL_get_normals((jl_value_t*)smpl_verts,(jl_value_t*)smpl_f,(jl_value_t*)verts_normals);
 	jl_gc_enable(1);
-
+	
 	double t1 = tmr.elapsed();
     float* data = (float*)jl_array_data(smpl_verts);
 
     std::cout << std::endl << t1 << std::endl;
-
+/*
     for (int i=0;i<10;i++)
     {
-        std::cout << verts_buf[i] << std::endl;
+        std::cout << verts_normals_buf[i] << std::endl;
     }
 
     /*

@@ -1,8 +1,8 @@
 module SMPLMod
 
 
-using NPZ
-using LinearAlgebra
+using NPZ;
+using LinearAlgebra;
 
 struct SMPL
     v_template::Array{Float32,2};
@@ -31,7 +31,7 @@ function createSMPL(model_path::String)
                 zeros(Float32,10),
                 zeros(Float32,72),
                 zeros(Float32,3),
-                f)        # python to cpp indexing
+                f.+1)        # python to cpp indexing
 
     return smpl
 end
@@ -120,6 +120,33 @@ function rodrigues(rot_vec,eps=1.0f-8)
 
 end
 
+function _lg_cross(A::AbstractArray, B::AbstractArray)
+    if !(size(A, 1) == size(B, 1) == 3)
+        throw(
+            DimensionMismatch(
+                "cross product is only defined for AbstractArray of dimension 3 at dims 1",
+            ),
+        )
+    end
+    a1, a2, a3 = A[1, :], A[2, :], A[3, :]
+    b1, b2, b3 = B[1, :], B[2, :], B[3, :]
+    return vcat(
+        reshape.(
+            [(a2 .* b3) - (a3 .* b2), (a3 .* b1) - (a1 .* b3), (a1 .* b2) - (a2 .* b1)],
+            1,
+            :,
+        )...,
+    )
+end
+
+_norm(A::AbstractArray; dims::Int = 2) = sqrt.(sum(A .^ 2; dims = dims))
+
+function _normalize(A::AbstractArray{T,2}; eps::Number = 1e-6, dims::Int = 2) where {T}
+    eps = T.(eps)
+    norm = max.(_norm(A; dims = dims), eps)
+    return (A ./ norm)
+end
+
 Base.@ccallable function CSMPL_LBS(v_template::Array{Float32,2},
                     shapedirs::Array{Float32,3},
                     posedirs::Array{Float32,2},
@@ -131,55 +158,32 @@ Base.@ccallable function CSMPL_LBS(v_template::Array{Float32,2},
                     trans::Array{Float32,1},
                     v_ret::Array{Float32,2})::Array{Float32,2}
     """pose input (3x3)x24 : batch of 24 of 3x3 rotation matrices  """
-    # @time begin
-    # v_template = Array(reshape(reinterpret(Float32,v_templat),(6890,3)));
-    # shapedirs = Array(reshape(reinterpret(Float32,shapedir),(6890,3,10)));
-    # posedirs = Array(reshape(reinterpret(Float32,posedir),(207,20670)));
-    # J_regressor = Array(reshape(reinterpret(Float32,J_regresso),(24,6890)));
-    # lbs_weights = Array(reshape(reinterpret(Float32,lbs_weight),(6890,24)));
-    # pose = Array(reshape(reinterpret(Float32,pos),(72)));
-    # betas = Array(reshape(reinterpret(Float32,beta),(10)));
-    # trans = Array(reshape(reinterpret(Float32,tran),(3)));
-    # end
 
-    # @show pose
-
-    # @time begin
     rs = reshape(shapedirs,(6890*3,:));
     v_shaped = v_template + reshape(rs*betas,(6890,3));
     
     J = J_regressor*v_shaped;
-    # end
 
-    # @time begin
-    # if size(pose,1) == 24*3
     pose = reshape(pose,(3,24));
     rot_mats = cat([rodrigues(pose[:,i]) for i = 1:size(pose,2)]...,dims=3);
-    # elseif size(pose,1) == 24*3*3
-    #     rot_mats = reshape(pose,(3,3,24));
-    # end
-    # end
-    # @time begin
+
     pose_feature = permutedims(rot_mats[:,:,2:end],[2,1,3]) .- Matrix{Float32}(1I,3,3);
     
     pose_offsets = reshape(reshape(pose_feature,(1,:))*posedirs,(3,:))';
     
     v_posed = pose_offsets + v_shaped;
-    # end
-    # @time begin
+
     J_transformed, A = rigid_transform(rot_mats,J',parents.+1);
     
     T = reshape(reshape(A,(:,24))*lbs_weights',(4,4,:));
     
     v_posed_homo = vcat(v_posed',ones(Float32,1,6890));
-    # end
-    # @time begin
+
     v_homo = reduce(hcat,[T[:,:,i]*v_posed_homo[:,i] for i =1:6890]);
     # end
     verts = v_homo[1:3,:];
     v_final = verts.+trans[:,[CartesianIndex()]];
     
-    # @time begin
     v_ret[:] = v_final[:];
     # end
     return v_ret; 
@@ -187,144 +191,70 @@ Base.@ccallable function CSMPL_LBS(v_template::Array{Float32,2},
 end
 
 
-# Base.@ccallable function smpl_lbs2(v_template::Array{Float32,2},
-#                     shapedirs::Array{Float32,3},
-#                     posedirs::Array{Float32,2},
-#                     J_regressor::Array{Float32,2},
-#                     parents::Array{Int64,1},
-#                     lbs_weights::Array{Float32,2})::Array{Float32,2}
-#     """pose input (3x3)x24 : batch of 24 of 3x3 rotation matrices  """
+Base.@ccallable function CSMPL_get_normals(verts::Array{Float32,2},faces::Array{UInt32,2}, normals::Array{Float32,2})::Array{Float32,2}
+    vert_faces = verts[:,faces];
     
-#     return v_template';
-        
-# end
+    vertex_normals = zeros(typeof(verts[1]),size(verts));
+    vertex_normals[:, faces[1, :]] += _lg_cross(
+        vert_faces[:, 2, :] - vert_faces[:, 1, :],
+        vert_faces[:, 3, :] - vert_faces[:, 1, :],
+    );
+    vertex_normals[:, faces[2, :]] += _lg_cross(
+        vert_faces[:, 3, :] - vert_faces[:, 2, :],
+        vert_faces[:, 1, :] - vert_faces[:, 2, :],
+    );
+    vertex_normals[:, faces[3, :]] += _lg_cross(
+        vert_faces[:, 1, :] - vert_faces[:, 3, :],
+        vert_faces[:, 2, :] - vert_faces[:, 3, :],
+    );
+
+    normals[:] = _normalize(copy(vertex_normals), dims = 1);
+    return normals;
+end
+
 
 Base.@ccallable function CSMPL_v_template(v_template::Array{Float32,2})::Array{Float32,2}
     smpl = createSMPL(ENV["SMPLPATH"]);
-    # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
-    # print(size(verts))
-    # @show joints
     v_template[:]   = smpl.v_template[:];
     return v_template;
 end
 Base.@ccallable function CSMPL_shapedirs(shapedirs::Array{Float32,3})::Array{Float32,3}
     smpl = createSMPL(ENV["SMPLPATH"]);
-    # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
-    # print(size(verts))
-    # @show joints
     shapedirs[:] = smpl.shapedirs[:];
     return shapedirs;
 end
 Base.@ccallable function CSMPL_posedirs(posedirs::Array{Float32,2})::Array{Float32,2}
     smpl = createSMPL(ENV["SMPLPATH"]);
-    # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
-    # print(size(verts))
-    # @show joints
     posedirs[:] = smpl.posedirs[:];
     return posedirs;
 end
 Base.@ccallable function CSMPL_J_regressor(J_regressor::Array{Float32,2})::Array{Float32,2}
     smpl = createSMPL(ENV["SMPLPATH"]);
-    # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
-    # print(size(verts))
-    # @show joints
     J_regressor[:] = smpl.J_regressor[:];
     return J_regressor;
 end
 Base.@ccallable function CSMPL_parents(parents::Array{UInt32,1})::Array{UInt32,1}
     smpl = createSMPL(ENV["SMPLPATH"]);
-    # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
-    # print(size(verts))
-    # @show joints
     parents[:] = smpl.parents[:];
     return parents;
 end
 Base.@ccallable function CSMPL_lbs_weights(lbs_weights::Array{Float32,2})::Array{Float32,2}
     smpl = createSMPL(ENV["SMPLPATH"]);
-    # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
-    # print(size(verts))
-    # @show joints
     lbs_weights[:] = smpl.lbs_weights[:];
     return lbs_weights;
 end
 Base.@ccallable function CSMPL_f(f::Array{UInt32,2})::Array{UInt32,2}
     smpl = createSMPL(ENV["SMPLPATH"]);
-    # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
-    # print(size(verts))
-    # @show joints
     f[:] = smpl.f[:];
     return f;
 end
-Base.@ccallable function test(test::Array{Float32,2})::Array{Float32,2}
-    return reshape(reinterpret(Float32,test),(3,6890));
-end
-Base.@ccallable function CSMPL()::Any
-    smpl = createSMPL(ENV["SMPLPATH"]);
-    # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
-    # print(size(verts))
-    # @show joints
-    return smpl;
-end
-# Base.@ccallable function CSMPL_v_template(v_template::Array{Float32,2})::Cvoid
-#     smpl = createSMPL("D:\\julia\\projects\\smpl\\smpl_new.npz");
+
+# Base.@ccallable function CSMPL()::Any
+#     smpl = createSMPL(ENV["SMPLPATH"]);
 #     # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
 #     # print(size(verts))
 #     # @show joints
-#     v_template[:]   = smpl.v_template[:];
-#     return nothing;
-# end
-# Base.@ccallable function CSMPL_shapedirs(shapedirs::Array{Float32,3})::Cvoid
-#     smpl = createSMPL("D:\\julia\\projects\\smpl\\smpl_new.npz");
-#     # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
-#     # print(size(verts))
-#     # @show joints
-#     shapedirs[:] = smpl.shapedirs[:];
-#     return nothing;
-# end
-# Base.@ccallable function CSMPL_posedirs(posedirs::Array{Float32,2})::Cvoid
-#     smpl = createSMPL("D:\\julia\\projects\\smpl\\smpl_new.npz");
-#     # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
-#     # print(size(verts))
-#     # @show joints
-#     posedirs[:] = smpl.posedirs[:];
-#     return nothing;
-# end
-# Base.@ccallable function CSMPL_J_regressor(J_regressor::Array{Float32,2})::Cvoid
-#     smpl = createSMPL("D:\\julia\\projects\\smpl\\smpl_new.npz");
-#     # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
-#     # print(size(verts))
-#     # @show joints
-#     J_regressor[:] = smpl.J_regressor[:];
-#     return nothing;
-# end
-# Base.@ccallable function CSMPL_parents(parents::Array{UInt32,1})::Cvoid
-#     smpl = createSMPL("D:\\julia\\projects\\smpl\\smpl_new.npz");
-#     # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
-#     # print(size(verts))
-#     # @show joints
-#     parents[:] = smpl.parents[:];
-#     return nothing;
-# end
-# Base.@ccallable function CSMPL_lbs_weights(lbs_weights::Array{Float32,2})::Cvoid
-#     smpl = createSMPL("D:\\julia\\projects\\smpl\\smpl_new.npz");
-#     # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
-#     # print(size(verts))
-#     # @show joints
-#     lbs_weights[:] = smpl.lbs_weights[:];
-#     return nothing;
-# end
-# Base.@ccallable function CSMPL_f(f::Array{UInt32,2})::Cvoid
-#     smpl = createSMPL("D:\\julia\\projects\\smpl\\smpl_new.npz");
-#     # verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
-#     # print(size(verts))
-#     # @show joints
-#     f[:] = smpl.f[:];
-#     return nothing;
-# end
-# Base.@ccallable function CSMPL_LBS(inp::Ptr{Cvoid})::Array{Float32,2}
-#     smpl = Base.unsafe_convert(SMPL,inp);
-#     verts,_ = smpl_lbs(smpl.betas,smpl.thetas,smpl);
-#     return verts;
+#     return smpl;
 # end
 
 
@@ -332,5 +262,7 @@ end
 smpl = createSMPL(ENV["SMPLPATH"]);
 CSMPL_LBS(smpl.v_template,smpl.shapedirs,smpl.posedirs,smpl.J_regressor,smpl.parents,smpl.lbs_weights,zeros(Float32,72),zeros(Float32,10),zeros(Float32,3),zeros(Float32,3,6890));
 CSMPL_LBS(smpl.v_template,smpl.shapedirs,smpl.posedirs,smpl.J_regressor,smpl.parents,smpl.lbs_weights,zeros(Float32,72),zeros(Float32,10),zeros(Float32,3),zeros(Float32,3,6890));
+CSMPL_get_normals(copy(smpl.v_template'),smpl.f,zeros(Float32,3,6890));
+CSMPL_get_normals(copy(smpl.v_template'),smpl.f,zeros(Float32,3,6890));
 
 end

@@ -3,3 +3,8 @@
 /dev/
 /smplbuild/
 data
+
+models/
+*.out
+*.npy
+*.npz
