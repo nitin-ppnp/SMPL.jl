@@ -5,10 +5,13 @@ version = "0.1.0"
 
 [deps]
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+FLoops = "cc61a311-1640-44b5-9fba-1b764f453329"
+Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 NPZ = "15e1cf62-19b3-5cfa-8e77-841668bca605"
 SharedArrays = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
+Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
 julia = "1"

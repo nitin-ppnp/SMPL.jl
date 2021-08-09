@@ -3,3 +3,6 @@
 /dev/
 smplbuild
 data
+statprof
+.vscode
+models

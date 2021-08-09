@@ -4,6 +4,7 @@ using SharedArrays;
 using Distributed;
 using Flux;
 using Zygote;
+using FLoops;
 
 struct SMPLdata
     v_template::Array{Float32,2}
@@ -45,7 +46,12 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},
     
     if size(pose,1) == 24*3
         pose = reshape(pose,(3,24))
-        rot_mats = cat([rodrigues(pose[:,i]) for i = 1:size(pose,2)]...,dims=3)
+        rot_mats_buf = Zygote.Buffer(Array{Float32,3}(undef,3,3,24))
+        @inbounds for i = 1:24
+            rot_mats_buf[:,:,i] = rodrigues(pose[:,i])
+        end
+        rot_mats = copy(rot_mats_buf)
+        # rot_mats = cat([rodrigues(pose[:,i]) for i = 1:size(pose,2)]...,dims=3)
     elseif size(pose,1) == 24*3*3
         rot_mats = reshape(pose,(3,3,24))
     end
@@ -73,10 +79,10 @@ end
 
 
 function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,1})
-    verts = SharedArray{Float32}(size(smpl.v_template)[end:-1:1]...,size(betas,2));
-    joints = SharedArray{Float32}(3,24,size(betas,2));
+    verts = Array{Float32}(undef,size(smpl.v_template)[end:-1:1]...,size(betas,2));
+    joints = Array{Float32}(undef,3,24,size(betas,2));
     
-    @sync @distributed for i = 1:size(pose,2)
+    @inbounds Threads.@threads for i = 1:size(pose,2)
         verts[:,:,i], joints[:,:,i] = smpl_lbs(smpl,betas[:,i],pose);
     end
     
@@ -85,10 +91,10 @@ end
 
 function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2})
     
-    verts = SharedArray{Float32}(size(smpl.v_template)[end:-1:1]...,size(pose,2));
-    joints = SharedArray{Float32}(3,24,size(pose,2));
+    verts = Array{Float32}(undef,size(smpl.v_template)[end:-1:1]...,size(betas,2));
+    joints = Array{Float32}(undef,3,24,size(betas,2));
     
-    @sync @distributed for i = 1:size(pose,2)
+    @inbounds Threads.@threads for i = 1:size(pose,2)
         verts[:,:,i], joints[:,:,i] = smpl_lbs(smpl,betas,pose[:,i]);
     end
     
@@ -97,10 +103,10 @@ end
 
 function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},trans::Array{Float32,2})
     
-    verts = SharedArray{Float32}(size(smpl.v_template)[end:-1:1]...,size(pose,2));
-    joints = SharedArray{Float32}(3,24,size(pose,2));
+    verts = Array{Float32}(undef,size(smpl.v_template)[end:-1:1]...,size(betas,2));
+    joints = Array{Float32}(undef,3,24,size(betas,2));
     
-    @sync @distributed for i = 1:size(pose,2)
+    @inbounds Threads.@threads for i = 1:size(pose,2)
         verts[:,:,i], joints[:,:,i] = smpl_lbs(smpl,betas,pose[:,i],trans[:,i]);
     end
     
@@ -108,10 +114,10 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},
 end
     
 function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,2},trans::Array{Float32,2})
-    verts = SharedArray{Float32}(size(smpl.v_template)[end:-1:1]...,size(pose,2));
-    joints = SharedArray{Float32}(3,24,size(pose,2));
+    verts = Array{Float32}(undef,size(smpl.v_template)[end:-1:1]...,size(betas,2));
+    joints = Array{Float32}(undef,3,24,size(betas,2));
     
-    @sync @distributed for i = 1:size(pose,2)
+    @inbounds Threads.@threads for i = 1:size(pose,2)
         verts[:,:,i], joints[:,:,i] = smpl_lbs(smpl,betas[:,i],pose[:,i],trans[:,i]);
     end
     
@@ -189,7 +195,7 @@ function rigid_transform(rot_mats,joints,parents)
     #     transforms[:,:,i] = transforms[:,:,parents[i]] * transforms_mat[:,:,i]
     # end
     buf = Zygote.Buffer(zeros(Float32,size(transforms_mat)),size(transforms_mat))
-    for i=2:size(parents)[1]
+    @inbounds for i=2:size(parents)[1]
         transf[i] = transf[parents[i]] * transforms_mat[:,:,i]
         buf[:,:,i] = transf[i]
     end
@@ -203,7 +209,12 @@ function rigid_transform(rot_mats,joints,parents)
     
     joints_homo = vcat(joints,zeros(Float32,1,size(joints)[2]))
 
-    init_bone = hcat(zeros(Float32,4,3,24),batched_mul(transforms,joints_homo[:,[CartesianIndex()],:]))
+    buf_tj = Zygote.Buffer(zeros(Float32,4,4,24))
+    @inbounds for i = 1:24
+        buf_tj[:,1,i] = transforms[:,:,i]*joints_homo[:,i]
+    end
+    init_bone = copy(buf_tj)
+    # init_bone = hcat(zeros(Float32,4,3,24),batched_mul(transforms,joints_homo[:,[CartesianIndex()],:]))
     
     # temp = [hcat(zeros(Float32,4,3),transforms[:,:,i]*joints_homo[:,i]) for i=1:size(parents)[1]]
     # init_bone = cat(temp...,dims=3)
