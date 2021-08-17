@@ -6,7 +6,7 @@ using Flux;
 using Zygote;
 using FLoops;
 
-struct SMPLdata
+mutable struct SMPLdata
     v_template::Array{Float32,2}
     shapedirs::Array{Float32,3}
     posedirs::Array{Float32,2}
@@ -16,6 +16,23 @@ struct SMPLdata
     f::Array{UInt32,2}
 end
 
+function gpu(smpl::SMPLdata)
+    """
+    """
+    for field in fieldnames(SMPLdata)
+        setfield!(smpl,field,Flux.gpu(getfield(smpl,field)))
+    end
+    return smpl
+end
+
+function cpu(smpl::SMPLdata)
+    """
+    """
+    for field in fieldnames(SMPLdata)
+        setfield!(smpl,field,Flux.cpu(getfield(smpl,field)))
+    end
+    return smpl
+end
 
 
 function createSMPL(model_path)
@@ -36,6 +53,7 @@ end
 
 
 
+
 function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},trans::Array{Float32,1}=zeros(Float32,3))
     """pose input (3x3)x24 : batch of 24 of 3x3 rotation matrices  """
     
@@ -46,12 +64,7 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},
     
     if size(pose,1) == 24*3
         pose = reshape(pose,(3,24))
-        rot_mats_buf = Zygote.Buffer(Array{Float32,3}(undef,3,3,24))
-        @inbounds for i = 1:24
-            rot_mats_buf[:,:,i] = rodrigues(pose[:,i])
-        end
-        rot_mats = copy(rot_mats_buf)
-        # rot_mats = cat([rodrigues(pose[:,i]) for i = 1:size(pose,2)]...,dims=3)
+        rot_mats = cat([rodrigues(pose[:,i]) for i = 1:size(pose,2)]...,dims=3)
     elseif size(pose,1) == 24*3*3
         rot_mats = reshape(pose,(3,3,24))
     end
@@ -75,6 +88,7 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},
     return verts.+trans[:,[CartesianIndex()]], J_transformed.+trans[:,[CartesianIndex()]]
         
 end
+
 
 
 
@@ -195,6 +209,7 @@ function rigid_transform(rot_mats,joints,parents)
     #     transforms[:,:,i] = transforms[:,:,parents[i]] * transforms_mat[:,:,i]
     # end
     buf = Zygote.Buffer(zeros(Float32,size(transforms_mat)),size(transforms_mat))
+    buf[:,:,1] = transf[1]
     @inbounds for i=2:size(parents)[1]
         transf[i] = transf[parents[i]] * transforms_mat[:,:,i]
         buf[:,:,i] = transf[i]
@@ -211,7 +226,7 @@ function rigid_transform(rot_mats,joints,parents)
 
     buf_tj = Zygote.Buffer(zeros(Float32,4,4,24))
     @inbounds for i = 1:24
-        buf_tj[:,1,i] = transforms[:,:,i]*joints_homo[:,i]
+        buf_tj[:,4,i] = transforms[:,:,i]*joints_homo[:,i]
     end
     init_bone = copy(buf_tj)
     # init_bone = hcat(zeros(Float32,4,3,24),batched_mul(transforms,joints_homo[:,[CartesianIndex()],:]))
