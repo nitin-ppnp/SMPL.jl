@@ -65,10 +65,9 @@ end
 # WGLMakie.inline!(false)
 # scene = meshscatter(target_J[1,:],target_J[2,:],target_J[3,:],markersize=0.05,color=target_J[3,:]);
 verts,_ = smpl_lbs(smpl,zeros(Float32,10,101),poses,trans);
-idx = None(1)
-vert = @lift verts[:,:,$idx]';
+vert = Node(verts[:,:,1]');
 scene = mesh(vert,smpl.f;color=:turquoise);
 
 WGLMakie.record(scene,"test.gif",1:size(verts,3)) do i
-    idx[] = i
+    vert[] = verts[:,:,i]'
 end
