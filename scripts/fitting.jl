@@ -1,9 +1,9 @@
 using SMPL;
 using Flux;
 using CUDA;
-# using WGLMakie;
-# WGLMakie.activate!()
-using GLMakie;
+using WGLMakie;
+WGLMakie.activate!()
+# using GLMakie;
 
 
 # home_dir = ENV["SENSEI_USERSPACE_SELF"]
@@ -64,22 +64,18 @@ trans = copy(init_trans)
 end
 
 # WGLMakie.inline!(false)
-# scene = meshscatter(target_J[1,:],target_J[2,:],target_J[3,:],markersize=0.05,color=target_J[3,:]);
+scene = meshscatter(target_J[1,:],target_J[2,:],target_J[3,:],markersize=0.05,color=target_J[3,:],limits=FRect3D((0,0,0),(10,10,10)));
 
-# verts,_ = smpl_lbs(smpl,zeros(Float32,10,101),poses,trans);
-# vert = Node(verts[:,:,1]');
-# scene = mesh(vert,smpl.f;color=:turquoise);
-
-# WGLMakie.record(scene,"test.gif",1:size(verts,3)) do i
-#     vert[] = verts[:,:,i]'
-# end
 verts = zeros(Float32,3,6890,101);
 for i = 1:101
     verts[:,:,i] = smpl_lbs(smpl,zeros(Float32,10),poses[:,i],trans[:,i])[1];
 end
 vert = Node(verts[:,:,1]');
-scene = mesh(vert,smpl.f;color=:turquoise)
-GLMakie.record(scene,"test.gif",length(verts)) do i
-    vert[] = verts[:,:,i]'
-end
+mesh!(vert,smpl.f;color=:turquoise)
 
+WGLMakie.record(scene,"test.gif") do io
+    for i=1:101
+        vert[] = verts[:,:,i]'
+        WGLMakie.recordframe!(io)
+    end
+end
