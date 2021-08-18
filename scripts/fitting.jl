@@ -1,8 +1,9 @@
 using SMPL;
 using Flux;
 using CUDA;
-using WGLMakie;
-WGLMakie.activate!()
+# using WGLMakie;
+# WGLMakie.activate!()
+using GLMakie;
 
 
 # home_dir = ENV["SENSEI_USERSPACE_SELF"]
@@ -13,7 +14,7 @@ smpl  = createSMPL(joinpath(home_dir,"projects/SMPL.jl/models/basicmodel_m_lbs_1
 device = Flux.cpu;
 
 target_pose = zeros(Float32,72) |> device;
-target_trans = ones(Float32,3) |> device;
+target_trans = 10 .* ones(Float32,3) |> device;
 
 target_V, target_J = smpl_lbs(smpl,zeros(Float32,10),target_pose,target_trans);
 
@@ -28,7 +29,7 @@ init_trans = zeros(Float32,3) |> device;
 
 init_V, init_J = smpl_lbs(smpl,zeros(Float32,10),init_pose,init_trans);
 
-opt = ADAM(0.001);
+opt = ADAM(0.1);
 
 
 using Flux.Optimise: update!
@@ -64,10 +65,21 @@ end
 
 # WGLMakie.inline!(false)
 # scene = meshscatter(target_J[1,:],target_J[2,:],target_J[3,:],markersize=0.05,color=target_J[3,:]);
-verts,_ = smpl_lbs(smpl,zeros(Float32,10,101),poses,trans);
-vert = Node(verts[:,:,1]');
-scene = mesh(vert,smpl.f;color=:turquoise);
 
-WGLMakie.record(scene,"test.gif",1:size(verts,3)) do i
+# verts,_ = smpl_lbs(smpl,zeros(Float32,10,101),poses,trans);
+# vert = Node(verts[:,:,1]');
+# scene = mesh(vert,smpl.f;color=:turquoise);
+
+# WGLMakie.record(scene,"test.gif",1:size(verts,3)) do i
+#     vert[] = verts[:,:,i]'
+# end
+verts = zeros(Float32,3,6890,101);
+for i = 1:101
+    verts[:,:,i] = smpl_lbs(smpl,zeros(Float32,10),poses[:,i],trans[:,i])[1];
+end
+vert = Node(verts[:,:,1]');
+scene = mesh(vert,smpl.f;color=:turquoise)
+GLMakie.record(scene,"test.gif",length(verts)) do i
     vert[] = verts[:,:,i]'
 end
+

@@ -64,7 +64,12 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},
     
     if size(pose,1) == 24*3
         pose = reshape(pose,(3,24))
-        rot_mats = cat([rodrigues(pose[:,i]) for i = 1:size(pose,2)]...,dims=3)
+        rot_mats_buf = Zygote.Buffer(Array{Float32,3}(undef,3,3,24))
+        @inbounds for i = 1:24
+            rot_mats_buf[:,:,i] = rodrigues(pose[:,i])
+        end
+        rot_mats = copy(rot_mats_buf)
+        # rot_mats = cat([rodrigues(pose[:,i]) for i = 1:size(pose,2)]...,dims=3)
     elseif size(pose,1) == 24*3*3
         rot_mats = reshape(pose,(3,3,24))
     end
@@ -85,7 +90,7 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},
     # v_homo = reduce(hcat,temp);
     v_homo = dropdims(batched_mul(T,v_posed_homo[:,[CartesianIndex()],:]);dims=2);
     verts = v_homo[1:3,:]
-    return verts.+trans, J_transformed.+trans
+    return verts.+trans[:,[CartesianIndex()]], J_transformed.+trans[:,[CartesianIndex()]]
         
 end
 
@@ -227,6 +232,7 @@ function rigid_transform(rot_mats,joints,parents)
     buf_tj = Zygote.Buffer(zeros(Float32,4,4,24))
     @inbounds for i = 1:24
         buf_tj[:,4,i] = transforms[:,:,i]*joints_homo[:,i]
+        buf_tj[:,1:3,i] = [0 0 0 ; 0 0 0 ; 0 0 0 ; 0 0 0]
     end
     init_bone = copy(buf_tj)
     # init_bone = hcat(zeros(Float32,4,3,24),batched_mul(transforms,joints_homo[:,[CartesianIndex()],:]))
