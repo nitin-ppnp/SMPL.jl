@@ -3,17 +3,19 @@ using LinearAlgebra
 using SharedArrays;
 using Distributed;
 using Flux;
+import Flux: gpu,cpu;
 using Zygote;
 using FLoops;
+using CUDA;
 
 mutable struct SMPLdata
-    v_template::Array{Float32,2}
-    shapedirs::Array{Float32,3}
-    posedirs::Array{Float32,2}
-    J_regressor::Array{Float32,2}
-    parents::Array{UInt32,1}
-    lbs_weights::Array{Float32,2}
-    f::Array{UInt32,2}
+    v_template::AbstractArray{Float32,2}
+    shapedirs::AbstractArray{Float32,3}
+    posedirs::AbstractArray{Float32,2}
+    J_regressor::AbstractArray{Float32,2}
+    parents::AbstractArray{UInt32,1}
+    lbs_weights::AbstractArray{Float32,2}
+    f::AbstractArray{UInt32,2}
 end
 
 function gpu(smpl::SMPLdata)
@@ -54,9 +56,11 @@ end
 
 
 
-function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},trans::Array{Float32,1}=zeros(Float32,3))
+function smpl_lbs(smpl::SMPLdata,betas::AbstractArray{Float32,1},pose::AbstractArray{Float32,1},trans::AbstractArray{Float32,1}=zeros(Float32,3))
     """pose input (3x3)x24 : batch of 24 of 3x3 rotation matrices  """
     
+    device = typeof(smpl.v_template) <: CuArray ? gpu : cpu;
+
     v_shaped = smpl.v_template + reshape(reshape(smpl.shapedirs,(6890*3,:))*betas,(6890,3))
     
     J = smpl.J_regressor*v_shaped
@@ -64,7 +68,7 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},
     
     if size(pose,1) == 24*3
         pose = reshape(pose,(3,24))
-        rot_mats_buf = Zygote.Buffer(Array{Float32,3}(undef,3,3,24))
+        rot_mats_buf = Zygote.Buffer(Array{Float32,3}(undef,3,3,24) |> device)
         @inbounds for i = 1:24
             rot_mats_buf[:,:,i] = rodrigues(pose[:,i])
         end
@@ -74,7 +78,7 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},
         rot_mats = reshape(pose,(3,3,24))
     end
     
-    pose_feature = permutedims(rot_mats[:,:,2:end],[2,1,3]) .- Matrix{Float32}(1I,3,3)
+    pose_feature = permutedims(rot_mats[:,:,2:end],[2,1,3]) .- (Matrix{Float32}(1I,3,3) |> device)
     
     pose_offsets = reshape(reshape(pose_feature,(1,:))*smpl.posedirs,(3,:))'
     
@@ -85,7 +89,7 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},
     
     T = reshape(reshape(A,(:,24))*smpl.lbs_weights',(4,4,:))
     
-    v_posed_homo = vcat(v_posed',ones(Float32,1,6890))
+    v_posed_homo = vcat(v_posed',ones(Float32,1,6890) |> device)
     # temp = [T[:,:,i]*v_posed_homo[:,i] for i =1:6890];
     # v_homo = reduce(hcat,temp);
     v_homo = dropdims(batched_mul(T,v_posed_homo[:,[CartesianIndex()],:]);dims=2);
@@ -201,19 +205,21 @@ end
 
 function rigid_transform(rot_mats,joints,parents)
     
+    device = typeof(rot_mats) <: CuArray ? gpu : cpu;
+
     rel_joints1 = joints[:,1]
     # rel_joints[:,2:end] -= joints[:,parents[2:end]]
     rel_joints = hcat(rel_joints1,joints[:,2:end]-joints[:,parents[2:end]])
     
     transforms_mat = cat([vcat(hcat(rot_mats[:,:,i],rel_joints[:,i]),[0 0 0 1]) for i = 1:size(rot_mats)[3]]...,dims=3)
     
-    transf = Dict()
+    transf = Dict() |> device
     transf[1] = transforms_mat[:,:,1]
     
     # for i=2:size(parents)[1]
     #     transforms[:,:,i] = transforms[:,:,parents[i]] * transforms_mat[:,:,i]
     # end
-    buf = Zygote.Buffer(zeros(Float32,size(transforms_mat)),size(transforms_mat))
+    buf = Zygote.Buffer(zeros(Float32,size(transforms_mat)) |> device,size(transforms_mat))
     buf[:,:,1] = transf[1]
     @inbounds for i=2:size(parents)[1]
         transf[i] = transf[parents[i]] * transforms_mat[:,:,i]
@@ -227,9 +233,10 @@ function rigid_transform(rot_mats,joints,parents)
     posed_joints = transforms[1:3,4,:]
 
     
-    joints_homo = vcat(joints,zeros(Float32,1,size(joints)[2]))
+    joints_homo = vcat(joints,zeros(Float32,1,size(joints)[2]) |> device)
 
-    buf_tj = Zygote.Buffer(zeros(Float32,4,4,24))
+    buf_tj = Zygote.Buffer(zeros(Float32,4,4,24) |> device)
+
     @inbounds for i = 1:24
         buf_tj[:,4,i] = transforms[:,:,i]*joints_homo[:,i]
         buf_tj[:,1:3,i] = [0 0 0 ; 0 0 0 ; 0 0 0 ; 0 0 0]
@@ -258,15 +265,15 @@ function vertices2joints(J_regressor,vertices)
 
 
 function rodrigues(rot_vec,eps=1.0f-8)
-    
+    device = typeof(rot_vec) <: CuArray ? gpu : cpu;
     angle = sqrt(sum((rot_vec.+eps).^2))
     rot_dir = rot_vec ./ angle
     
     K = [0 -rot_dir[3] rot_dir[2] ;
         rot_dir[3] 0 -rot_dir[1] ;
-        -rot_dir[2] rot_dir[1] 0]
+        -rot_dir[2] rot_dir[1] 0] |> device
     
-    rot_mat = Matrix{Float32}(1.0I,3,3) + sin(angle)*K + (1-cos(angle))*K*K
+    rot_mat = (Matrix{Float32}(1.0I,3,3) |> device) + sin(angle)*K + (1-cos(angle))*K*K
     
     return rot_mat
 
