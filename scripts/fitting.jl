@@ -9,8 +9,8 @@ WGLMakie.activate!()
 # using GLMakie;
 
 # setup home directory
-home_dir = ENV["SENSEI_USERSPACE_SELF"]
-# home_dir = "/Users/natinsaini/"
+# home_dir = ENV["SENSEI_USERSPACE_SELF"]
+home_dir = "/Users/natinsaini/"
 
 # set device
 device = gpu;

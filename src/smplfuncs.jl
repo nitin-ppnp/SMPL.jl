@@ -126,8 +126,8 @@ end
 
 function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},trans::Array{Float32,2})
     
-    verts = Array{Float32}(undef,size(smpl.v_template)[end:-1:1]...,size(betas,2));
-    joints = Array{Float32}(undef,3,24,size(betas,2));
+    verts = Array{Float32}(undef,size(smpl.v_template)[end:-1:1]...,size(pose,2));
+    joints = Array{Float32}(undef,3,24,size(pose,2));
     
     @inbounds Threads.@threads for i = 1:size(pose,2)
         verts[:,:,i], joints[:,:,i] = smpl_lbs(smpl,betas,pose[:,i],trans[:,i]);
