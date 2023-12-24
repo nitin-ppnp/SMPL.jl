@@ -5,3 +5,5 @@ smplbuild
 data
 *.npy
 *.npz
+
+.vscode/

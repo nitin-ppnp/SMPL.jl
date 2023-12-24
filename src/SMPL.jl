@@ -1,7 +1,6 @@
-__precompile__
-
 module SMPL
 
+include("smpldata.jl")
 include("smplfuncs.jl");
 export createSMPL;
 export smpl_lbs;
