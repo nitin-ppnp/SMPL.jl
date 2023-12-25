@@ -6,9 +6,9 @@ version = "0.1.0"
 [deps]
 DataDeps = "124859b0-ceae-595e-8997-d05f6a7a8dfe"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 NPZ = "15e1cf62-19b3-5cfa-8e77-841668bca605"
 SharedArrays = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 

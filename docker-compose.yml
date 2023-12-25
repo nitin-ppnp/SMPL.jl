@@ -1,0 +1,19 @@
+version: "3.8"
+services:
+  smpl_julia:
+    tty: true
+    build:
+      context: .
+    container_name: smpl_julia
+    volumes:
+      - .:/code
+      - $HOME:$HOME
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    environment:
+      - DISPLAY=${DISPLAY}
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]

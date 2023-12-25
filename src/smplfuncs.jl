@@ -227,11 +227,11 @@ end
     
 
 ########################## Viz ###########################
-using Makie
+using GLMakie
 
 function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1};kwargs...)
     verts,J = smpl_lbs(smpl,betas,pose)
-    scene = Makie.mesh(verts',smpl.f;kwargs...)
+    scene = GLMakie.mesh(verts',smpl.f;kwargs...)
     return scene
 end
 
@@ -239,13 +239,13 @@ function viz_smpl(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,1};
     verts,J = smpl_lbs(smpl,betas,pose,smpl)
     
     vert = Node(verts[:,:,1]')
-    msh = Makie.mesh(vert,smpl.f;kwargs...)
+    msh = GLMakie.mesh(vert,smpl.f;kwargs...)
     # msh[Axis][:showaxis] = (false,false,false);
     # msh[Axis][:showgrid] = (false,true,false);
     # msh[Axis][:showticks] = (false,false,false);
     display(msh)
     if record
-        Makie.record(msh,recordFile,1:size(verts,3)) do i
+        GLMakie.record(msh,recordFile,1:size(verts,3)) do i
             vert[] = verts[:,:,i]'
             sleep(tsleep)
         end
@@ -261,13 +261,13 @@ function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2};
     verts,J = smpl_lbs(smpl,betas,pose)
     
     vert = Node(verts[:,:,1]')
-    msh = Makie.mesh(vert,smpl.f;kwargs...)
+    msh = GLMakie.mesh(vert,smpl.f;kwargs...)
     # msh[Axis][:showaxis] = (false,false,false);
     # msh[Axis][:showgrid] = (false,true,false);
     # msh[Axis][:showticks] = (false,false,false);
     display(msh)
     if record
-        Makie.record(msh,recordFile,1:size(verts,3)) do i
+        GLMakie.record(msh,recordFile,1:size(verts,3)) do i
             vert[] = verts[:,:,i]'
             sleep(tsleep)
         end
@@ -282,13 +282,13 @@ end
 function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,2},trans::Array{Float32,2};tsleep=1/10,record=false,recordFile="smplRecord.mp4",kwargs...)
     verts,J = smpl_lbs(smpl,betas,pose,trans)
     vert = Node(verts[:,:,1]')
-    msh = Makie.mesh(vert,smpl.f;kwargs...)
+    msh = GLMakie.mesh(vert,smpl.f;kwargs...)
     # msh[Axis][:showaxis] = (false,false,false);
     # msh[Axis][:showgrid] = (false,true,false);
     # msh[Axis][:showticks] = (false,false,false);
     display(msh)
     if record
-        Makie.record(msh,recordFile,1:size(verts,3)) do i
+        GLMakie.record(msh,recordFile,1:size(verts,3)) do i
             vert[] = verts[:,:,i]'
             sleep(tsleep)
         end
@@ -304,13 +304,13 @@ function viz_smpl(smpl::SMPLdata,betas::Array{Float32,2},pose::Array{Float32,2};
     verts,J = smpl_lbs(smpl,betas,pose)
     
     vert = Node(verts[:,:,1]')
-    msh = Makie.mesh(vert,smpl.f;kwargs...)
+    msh = GLMakie.mesh(vert,smpl.f;kwargs...)
     # msh[Axis][:showaxis] = (false,false,false);
     # msh[Axis][:showgrid] = (false,true,false);
     # msh[Axis][:showticks] = (false,false,false);
     display(msh)
     if record
-        Makie.record(msh,recordFile,1:size(verts,3)) do i
+        GLMakie.record(msh,recordFile,1:size(verts,3)) do i
             vert[] = verts[:,:,i]'
             sleep(tsleep)
         end
