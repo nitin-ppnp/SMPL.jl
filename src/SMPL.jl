@@ -1,12 +1,18 @@
 module SMPL
 
 include("smpldata.jl")
+include("utils.jl")
 include("smplfuncs.jl");
-export createSMPL;
+include("smplxfuncs.jl");
+export create_smpl_female;
+export create_smpl_male;
+export create_smplx_female;
+export create_smplx_male;
+export create_smplx_neutral;
+export create_smpl;
+export create_smplx;
 export smpl_lbs;
+
 export viz_smpl;
-export smpl_male;
-export smpl_female;
-# export smpl_lbs2;
 
 end # module
