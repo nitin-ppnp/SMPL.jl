@@ -12,6 +12,7 @@ export create_smplx_neutral;
 export create_smpl;
 export create_smplx;
 export smpl_lbs;
+export pivot_fk;
 
 export viz_smpl;
 

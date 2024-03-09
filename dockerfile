@@ -10,7 +10,7 @@ ENV PYTHONFAULTHANDLER=1 \
   PATH="/poetry/bin:${PATH}"
 
 RUN apt update && apt install -y --no-install-recommends \
-    make xorg-dev && \
+    make xorg-dev curl gnupg git wget && \
     rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir poetry && \
@@ -18,23 +18,9 @@ RUN pip install --no-cache-dir poetry && \
     poetry config installer.max-workers 10 && \
     poetry self add poetry-dotenv-plugin
 
-WORKDIR /code
-COPY . /code
 
-RUN apt update && apt -y install gnupg git wget
-
-RUN pip install jill
-
-RUN jill install --confirm
-
-RUN pip install julia ipython --no-cache-dir
-# julia is pyjulia, our python-julia interface
-# jill is a python package for easy Julia installation
-# IPython is helpful for magic (both %time and %julia)
-# Include these in your requirements.txt if you have that instead
-
-# PyJulia setup (installs PyCall & other necessities)
-RUN python -c "import julia; julia.install()"
+RUN curl -fsSL https://install.julialang.org | sh -s -- -y
+SHELL ["bash", "-lc"]
 
 # Helpful Development Packages
 RUN julia -e 'using Pkg; Pkg.add(["Revise", "BenchmarkTools"])'

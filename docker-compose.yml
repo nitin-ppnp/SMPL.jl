@@ -4,14 +4,22 @@ services:
     tty: true
     build:
       context: .
+      args:
+        UserID: ${UserID}
+        GroupID: ${GroupID}
     container_name: smpl_julia
+    user: ${UserID}:${GroupID}
+    environment:
+      - DISPLAY
     volumes:
-      - .:/code
       - $HOME:$HOME
       - /tmp/.X11-unix:/tmp/.X11-unix
-    environment:
-      - DISPLAY=${DISPLAY}
+    network_mode: "host"
     ipc: host
+    cap_add:
+      - SYS_ADMIN
+      - DAC_READ_SEARCH
+    privileged: true
     deploy:
       resources:
         reservations:

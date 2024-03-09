@@ -1,5 +1,7 @@
 using DataDeps;
 using HTTP;
+using NPZ
+using LinearAlgebra
 
 
 function fetch_smpl_models(remote_filepath, local_directorypath)
@@ -20,6 +22,31 @@ function fetch_smpl_models(remote_filepath, local_directorypath)
     return local_directorypath
 end
 
+function fetch_smplx_models(remote_filepath, local_directorypath)
+    """
+    """
+    # print("SMPLX username: ")
+    # username = escape(readline())
+
+    # print("SMPLX password: ")
+    # password = escape(readline())
+
+    # run(`
+    # wget --post-data "username=$username&password=$password" "https://download.is.tue.mpg.de/download.php?domain=smpl&sfile=basicModel_f_lbs_10_207_0_v1.0.0.npz" -O $local_directorypath"/SMPL_FEMALE.npz" --no-check-certificate --continue`)
+
+    # run(`
+    # wget --post-data "username=$username&password=$password" "https://download.is.tue.mpg.de/download.php?domain=smpl&sfile=basicmodel_m_lbs_10_207_0_v1.0.0.npz" -O $local_directorypath"/SMPL_MALE.npz" --no-check-certificate --continue`)
+
+    # return local_directorypath
+end
+
+function smpl_female_static(model_path = joinpath(datadep"SMPL_models","SMPL_FEMALE.npz"))
+    return createStaticSMPL(model_path)
+end
+function smpl_male_static(model_path = joinpath(datadep"SMPL_models","SMPL_MALE.npz"))
+    return createStaticSMPL(model_path)
+end
+
 
 function __init__()
     """
@@ -32,7 +59,12 @@ function __init__()
     post_fetch_method = identity
     ))
 
-    global smpl_female = createSMPL(joinpath(datadep"SMPL_models","SMPL_FEMALE.npz"));
-    global smpl_male = createSMPL(joinpath(datadep"SMPL_models","SMPL_MALE.npz"));
+    register(DataDep("SMPLX_models",
+    "SMPLX model files",
+    "https://smpl-x.is.tue.mpg.de",
+    Any;
+    fetch_method = fetch_smplx_models,
+    post_fetch_method = identity
+    ))
 
 end

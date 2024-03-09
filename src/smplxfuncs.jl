@@ -71,9 +71,8 @@ function smpl_lbs(smplx::SMPLXdata,betas::Array{Float32,1},pose::Array{Float32,1
     # loop_einsum!(EinCode((('i','j', 'k'),('j','k')),('i','k')),(T,v_posed_homo),v_homo)
 
     verts = @views v_homo[1:3,:] .+ trans[:,[CartesianIndex()]]
-    J_transformed .+= trans[:,[CartesianIndex()]]
 
-    return verts, J_transformed
+    return verts, J_transformed[1:3,4,:].+trans[:,[CartesianIndex()]], J_transformed
         
 end
 
@@ -101,7 +100,7 @@ function rigid_transform_smplx(rot_mats,joints,parents)
         transforms[:,:,i] = transforms[:,:,parents[i]] * transforms_mat[:,:,i]
     end
     
-    posed_joints = transforms[1:3,4,:]
+    posed_joints = copy(transforms)
 
     
     joints_homo = vcat(joints,zeros(Float32,1,size(joints,2)))
@@ -119,8 +118,43 @@ end
 
 
 
+"""
+    vertices2joints_smplx(J_regressor,vertices)
+
+TBW
+"""
 function vertices2joints_smplx(J_regressor,vertices)
     
     return reshape(J_regressor*reshape(vertices,(10475,:)),(55,3,:))
     
     end
+
+
+"""
+    shape_correction(smplx::SMPLXdata, betas::Array{Float32,1})
+
+TBW
+"""
+function shape_correction(smplx::SMPLXdata, betas::Array{Float32,1})
+    v_shaped = smplx.v_template + reshape((@view smplx.shapedirs[:,1:length(betas)]) * betas,(10475,3))
+
+end
+
+
+
+function pivot_fk(smplx::SMPLXdata,betas::Array{Float32,1},poses::Array{Float32,2},contacts::Array{Float32,2},trans::Array{Float32,1}=zeros(Float32,3))
+    """pose input (3x3)x24 : batch of 24 of 3x3 rotation matrices  """
+    
+    verts = zeros(3,10475,size(poses,2));
+    joints = zeros(3,55,size(poses,2));
+    verts[:,:,1], _, joints[:,:,1] = smpl_lbs(smplx,betas,poses[1,:],trans);
+
+    for idx in axes(poses[2:end,:])
+        v, _, j = smpl_lbs(smplx,betas,poses[idx,:])
+
+    end
+
+
+    return verts, J_transformed
+        
+end

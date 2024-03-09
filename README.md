@@ -20,3 +20,7 @@ vertices,joints = smpl_lbs(smpl.smpl_female,zeros(Float32,10),zeros(Float32,72))
 # visualize zero pose and shape
 viz_smpl(smpl,zeros(Float32,10),zeros(Float32,72),color=:turquoise)
 ```
+
+
+# Benchmarking
+- Current smpl_lbs impl: 2.617 ms
