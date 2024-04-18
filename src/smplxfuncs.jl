@@ -146,15 +146,49 @@ function pivot_fk(smplx::SMPLXdata,betas::Array{Float32,1},poses::Array{Float32,
     """pose input (3x3)x24 : batch of 24 of 3x3 rotation matrices  """
     
     verts = zeros(3,10475,size(poses,2));
-    joints = zeros(3,55,size(poses,2));
-    verts[:,:,1], _, joints[:,:,1] = smpl_lbs(smplx,betas,poses[1,:],trans);
+    joints = zeros(4,4,55,size(poses,2));
+    v_ot, _, j_ot = smpl_lbs(smplx,betas,poses[:,1]);
+    verts[:,:,1] = v_ot .+ trans[:,[CartesianIndex()]]
+    joints[:,:,:,1] = j_ot
+    joints[1:3,4,:,1] .+= trans[:,[CartesianIndex()]]
 
-    for idx in axes(poses[2:end,:])
-        v, _, j = smpl_lbs(smplx,betas,poses[idx,:])
+    # contact joints
+    contact_joints = argmax(contacts,dims=1)
+    for (idx,cj) in enumerate(contact_joints[1:end-1])
+        v_ot_fut, _, j_ot_fut = smpl_lbs(smplx,betas,poses[:,idx+1])
+        
+        # all the joints relative to the contact joint
+        cj_inv_pose = inv(j_ot_fut[:,:,cj[1]])
+        rel_joints_ot_fut = stack([cj_inv_pose * j_ot_fut[:,:,i] for i in axes(j_ot_fut,3)])
+        
+        # joint_ot relative to past joint ot
+        joint_rel_past = inv(j_ot[:,:,cj[1]]) * j_ot_fut[:,:,cj[1]]
 
+        # check free fall
+        if false
+            vel = (out_joints[i,j,:3,3] - out_joints[i-1,j,:3,3]) * fps + \
+                torch.tensor(g).float().to(out_joints.device)/fps
+            # vel = torch.matmul(torch.linalg.inv(out_joints[i,j]),out_joints[i-1,j])[:3,3] * fps + \
+            #     torch.tensor(g).float().to(out_joints.device)/fps
+            joint_rel_past[:3,3] = torch.einsum("ak,k->a",torch.linalg.inv(joints_ot[i,j])[:3,:3],vel)/fps
+        else
+            joint_rel_past[1:3,4] .= 0
+        end
+
+        # rotate past joint with joint_ot relative to past joint_ot
+        rotated_fut_joint = joints[:,:,cj[1],idx] * joint_rel_past
+        # place future pose_ot at past joint
+        joints[:,:,:,idx+1] = stack([rotated_fut_joint * rel_joints_ot_fut[:,:,i] for i in axes(rel_joints_ot_fut,3)])
+        
+        # verts wrt contact joint ot
+        verts_wrt_cj_ot = cj_inv_pose[1:3,1:3] * v_ot_fut .+ cj_inv_pose[1:3,4]
+        verts[:,:,idx+1] = joints[1:3,1:3,cj[1],idx+1] * verts_wrt_cj_ot .+ joints[1:3, 4, cj[1], idx+1]
+
+        # 
+        j_ot = j_ot_fut
     end
 
 
-    return verts, J_transformed
+    return verts, joints
         
 end

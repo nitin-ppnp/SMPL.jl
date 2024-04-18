@@ -68,8 +68,9 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},
     # v_homo = zeros(Float32,4,6890)
     # loop_einsum!(EinCode((('i','j', 'k'),('j','k')),('i','k')),(T,v_posed_homo),v_homo)
 
-    verts = v_homo[1:3,:]
-    return verts.+trans[:,[CartesianIndex()]], J_transformed.+trans[:,[CartesianIndex()]]
+    verts = @views v_homo[1:3,:] .+ trans[:,[CartesianIndex()]]
+
+    return verts, J_transformed[1:3,4,:].+trans[:,[CartesianIndex()]], J_transformed
         
 end
 
@@ -96,7 +97,7 @@ function rigid_transform_smpl(rot_mats,joints,parents)
         transforms[:,:,i] = transforms[:,:,parents[i]] * transforms_mat[:,:,i]
     end
     
-    posed_joints = transforms[1:3,4,:]
+    posed_joints = copy(transforms)
 
     
     joints_homo = vcat(joints,zeros(Float32,1,size(joints,2)))
@@ -118,4 +119,56 @@ function vertices2joints_smpl(J_regressor,vertices)
     
     return reshape(J_regressor*reshape(vertices,(6890,:)),(24,3,:))
     
+end
+
+
+function pivot_fk(smpl::SMPLdata,betas::Array{Float32,1},poses::Array{Float32,2},contacts::Array{Float32,2},trans::Array{Float32,1}=zeros(Float32,3))
+    """pose input (3x3)x24 : batch of 24 of 3x3 rotation matrices  """
+    
+    verts = zeros(3,6890,size(poses,2));
+    joints = zeros(4,4,24,size(poses,2));
+    v_ot, _, j_ot = smpl_lbs(smpl,betas,poses[:,1]);
+    verts[:,:,1] = v_ot .+ trans[:,[CartesianIndex()]]
+    joints[:,:,:,1] = j_ot
+    joints[1:3,4,:,1] .+= trans[:,[CartesianIndex()]]
+
+    # contact joints
+    contact_joints = argmax(contacts,dims=1)
+    for (idx,cj) in enumerate(contact_joints[1:end-1])
+        v_ot_fut, _, j_ot_fut = smpl_lbs(smpl,betas,poses[:,idx+1])
+        
+        # all the joints relative to the contact joint
+        cj_inv_pose = inv(j_ot_fut[:,:,cj[1]])
+        rel_joints_ot_fut = stack([cj_inv_pose * j_ot_fut[:,:,i] for i in axes(j_ot_fut,3)])
+        
+        # joint_ot relative to past joint ot
+        joint_rel_past = inv(j_ot[:,:,cj[1]]) * j_ot_fut[:,:,cj[1]]
+
+        # check free fall
+        if false
+            vel = (out_joints[i,j,:3,3] - out_joints[i-1,j,:3,3]) * fps + \
+                torch.tensor(g).float().to(out_joints.device)/fps
+            # vel = torch.matmul(torch.linalg.inv(out_joints[i,j]),out_joints[i-1,j])[:3,3] * fps + \
+            #     torch.tensor(g).float().to(out_joints.device)/fps
+            joint_rel_past[:3,3] = torch.einsum("ak,k->a",torch.linalg.inv(joints_ot[i,j])[:3,:3],vel)/fps
+        else
+            joint_rel_past[1:3,4] .= 0
+        end
+
+        # rotate past joint with joint_ot relative to past joint_ot
+        rotated_fut_joint = joints[:,:,cj[1],idx] * joint_rel_past
+        # place future pose_ot at past joint
+        joints[:,:,:,idx+1] = stack([rotated_fut_joint * rel_joints_ot_fut[:,:,i] for i in axes(rel_joints_ot_fut,3)])
+        
+        # verts wrt contact joint ot
+        verts_wrt_cj_ot = cj_inv_pose[1:3,1:3] * v_ot_fut .+ cj_inv_pose[1:3,4]
+        verts[:,:,idx+1] = joints[1:3,1:3,cj[1],idx+1] * verts_wrt_cj_ot .+ joints[1:3, 4, cj[1], idx+1]
+
+        # 
+        j_ot = j_ot_fut
+    end
+
+
+    return verts, joints
+        
 end

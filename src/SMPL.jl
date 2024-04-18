@@ -6,6 +6,7 @@ include("smplfuncs.jl");
 include("smplxfuncs.jl");
 export create_smpl_female;
 export create_smpl_male;
+export create_smpl_neutral
 export create_smplx_female;
 export create_smplx_male;
 export create_smplx_neutral;
