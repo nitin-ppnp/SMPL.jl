@@ -14,7 +14,7 @@ function test_smpl()
     out_joints = data["out_joints"]
     out = smpl_lbs(smpl,betas,poses,trans);
 
-    return maximum(abs.(out[1] - out_vertices')) < 1e-5 && maximum(abs.(out[2] - out_joints')) < 1e-5
+    return maximum(abs.(out["vertices"] - out_vertices')) < 1e-5 && maximum(abs.(out["joints"] - out_joints')) < 1e-5
 end
 
 function test_smplx()
@@ -28,7 +28,7 @@ function test_smplx()
     out_joints = data["out_joints"]
     out = smpl_lbs(smplx,betas,poses,trans);
 
-    return maximum(abs.(out[1] - out_vertices')) < 1e-5 && maximum(abs.(out[2] - out_joints')) < 1e-5
+    return maximum(abs.(out["vertices"] - out_vertices')) < 1e-5 && maximum(abs.(out["joints"] - out_joints')) < 1e-5
 end
 
 @testset "SMPL" begin

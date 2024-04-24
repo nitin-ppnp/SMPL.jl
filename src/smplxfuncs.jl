@@ -72,7 +72,13 @@ function smpl_lbs(smplx::SMPLXdata,betas::Array{Float32,1},pose::Array{Float32,1
 
     verts = @views v_homo[1:3,:] .+ trans[:,[CartesianIndex()]]
 
-    return verts, J_transformed[1:3,4,:].+trans[:,[CartesianIndex()]], J_transformed
+    output = Dict("vertices" => verts, 
+                    "joints" => J_transformed[1:3,4,:].+trans[:,[CartesianIndex()]],
+                    "v_posed" => v_posed,
+                    "v_shaped" => v_shaped,
+                    "J_transformed" => J_transformed,
+                    "f" => smplx.f)
+    return output
         
 end
 
@@ -147,7 +153,8 @@ function pivot_fk(smplx::SMPLXdata,betas::Array{Float32,1},poses::Array{Float32,
     
     verts = zeros(3,10475,size(poses,2));
     joints = zeros(4,4,55,size(poses,2));
-    v_ot, _, j_ot = smpl_lbs(smplx,betas,poses[:,1]);
+    ot = smpl_lbs(smplx,betas,poses[:,1]);
+    v_ot, j_ot = ot["vertices"], ot["J_transformed"]
     verts[:,:,1] = v_ot .+ trans[:,[CartesianIndex()]]
     joints[:,:,:,1] = j_ot
     joints[1:3,4,:,1] .+= trans[:,[CartesianIndex()]]
