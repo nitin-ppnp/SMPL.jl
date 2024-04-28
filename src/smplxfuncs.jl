@@ -124,11 +124,7 @@ end
 
 
 
-"""
-    vertices2joints_smplx(J_regressor,vertices)
 
-TBW
-"""
 function vertices2joints_smplx(J_regressor,vertices)
     
     return reshape(J_regressor*reshape(vertices,(10475,:)),(55,3,:))
@@ -136,11 +132,7 @@ function vertices2joints_smplx(J_regressor,vertices)
     end
 
 
-"""
-    shape_correction(smplx::SMPLXdata, betas::Array{Float32,1})
 
-TBW
-"""
 function shape_correction(smplx::SMPLXdata, betas::Array{Float32,1})
     v_shaped = smplx.v_template + reshape((@view smplx.shapedirs[:,1:length(betas)]) * betas,(10475,3))
 

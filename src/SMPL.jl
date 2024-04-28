@@ -20,6 +20,4 @@ export create_supr;
 export smpl_lbs;
 export pivot_fk;
 
-export viz_smpl;
-
-end # module
+end

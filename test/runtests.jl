@@ -31,10 +31,28 @@ function test_smplx()
     return maximum(abs.(out["vertices"] - out_vertices')) < 1e-5 && maximum(abs.(out["joints"] - out_joints')) < 1e-5
 end
 
+function test_supr()
+    datapath = joinpath(@__DIR__,"suprtest.npz")
+    data = npzread(datapath);
+    supr = create_supr_neutral();
+    trans = data["trans"]
+    betas = data["betas"]
+    poses = data["poses"]
+    out_vertices = data["out_vertices"]
+    out_joints = data["out_joints"]
+    out = smpl_lbs(supr,betas,poses,trans);
+
+    return maximum(abs.(out["vertices"] - out_vertices)) < 1e-5 && maximum(abs.(out["joints"] - out_joints)) < 1e-5
+end
+
 @testset "SMPL" begin
     @test test_smpl()
 end
 
 @testset "SMPLX" begin
     @test test_smplx()
+end
+
+@testset "SUPR" begin
+    @test test_supr()
 end

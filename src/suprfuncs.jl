@@ -16,9 +16,9 @@ struct SUPRdata
     f::Array{UInt32,2}
 end
 
-create_supr_female() = createSUPR(joinpath(datadep"SUPR_models","SUPR_FEMALE.npz"));
-create_supr_male() = createSUPR(joinpath(datadep"SUPR_models","SUPR_MALE.npz"));
-create_supr_neutral() = createSUPR(joinpath(datadep"SUPR_models","SUPR_NEUTRAL.npz"));
+create_supr_female() = create_supr(joinpath(datadep"SUPR_models","SUPR_FEMALE.npz"));
+create_supr_male() = create_supr(joinpath(datadep"SUPR_models","SUPR_MALE.npz"));
+create_supr_neutral() = create_supr(joinpath(datadep"SUPR_models","SUPR_NEUTRAL.npz"));
 
 function create_supr(model_path::String)
     """
@@ -54,21 +54,6 @@ end
 
 function so3_so3_prod(r1,t1,r2,t2)
     return r1*r2, r1*t2 + t1
-end
-
-function rodrigues(rot_vec,eps=1.0f-8)
-    
-    angle = sqrt(sum((rot_vec.+eps).^2))
-    rot_dir = rot_vec ./ angle
-    
-    K = [0 -rot_dir[3] rot_dir[2] ;
-        rot_dir[3] 0 -rot_dir[1] ;
-        -rot_dir[2] rot_dir[1] 0]
-    
-    rot_mat = Matrix{Float32}(1.0I,3,3) + sin(angle)*K + (1-cos(angle))*K*K
-    
-    return rot_mat
-
 end
 
 
