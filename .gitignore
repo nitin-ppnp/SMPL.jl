@@ -5,3 +5,7 @@ smplbuild
 data
 *.npy
 *.npz
+*.mp4
+*.mkv
+
+.vscode/

@@ -1,7 +1,8 @@
 using NPZ; npz=NPZ
+using LinearAlgebra;
 using DataDeps;
 
-struct SMPLdata
+struct SMPLXdata
     v_template::Array{Float32,2}
     shapedirs::Array{Float32,2}
     posedirs::Array{Float32,2}
@@ -12,60 +13,61 @@ struct SMPLdata
 end
 
 
+create_smplx_female() = create_smplx(joinpath(datadep"SMPLX_models","SMPLX_FEMALE.npz"));
+create_smplx_male() = create_smplx(joinpath(datadep"SMPLX_models","SMPLX_MALE.npz"));
+create_smplx_neutral() = create_smplx(joinpath(datadep"SMPLX_models","SMPLX_NEUTRAL.npz"));
 
-create_smpl_female() = create_smpl(joinpath(datadep"SMPL_models","SMPL_FEMALE.npz"))
-create_smpl_male() = create_smpl(joinpath(datadep"SMPL_models","SMPL_MALE.npz"))
-create_smpl_neutral() = create_smpl(joinpath(datadep"SMPL_models","SMPL_NEUTRAL.npz"))
-
-function create_smpl(model_path)
+function create_smplx(model_path)
     """
     """
     model = NPZ.npzread(model_path);
-    model["shapedirs"] = reshape(model["shapedirs"],(6890*3,:))
-    model["posedirs"] = reshape(model["posedirs"],6890*3,:)'
-    smpl = SMPLdata(Float32.(model["v_template"]),
+    model["kintree_table"][1,1] = 0
+    model["shapedirs"] = reshape(model["shapedirs"],10475*3,:)
+    model["posedirs"] = reshape(model["posedirs"],10475*3,:)'
+    smplx = SMPLXdata(Float32.(model["v_template"]),
                 Float32.(model["shapedirs"]),
                 Float32.(model["posedirs"]),
                 Float32.(model["J_regressor"]),
                 UInt32.(model["kintree_table"][1,:]),
                 Float32.(model["weights"]),
                 model["f"].+1)        # python to julia indexing
-    return smpl
+    return smplx
 end
 
 
-function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},trans::Array{Float32,1}=zeros(Float32,3))
+function smpl_lbs(smplx::SMPLXdata,betas::Array{Float32,1},pose::Array{Float32,1},trans::Array{Float32,1}=zeros(Float32,3))
     """pose input (3x3)x24 : batch of 24 of 3x3 rotation matrices  """
     
-    v_shaped = smpl.v_template + reshape((@view smpl.shapedirs[:,1:length(betas)]) * betas,(6890,3))
+    v_shaped = smplx.v_template + reshape((@view smplx.shapedirs[:,1:length(betas)]) * betas,(10475,3))
     
-    J = smpl.J_regressor*v_shaped
+    J = smplx.J_regressor*v_shaped
     
-    pose_view = reshape(pose,(3,24))
-    rot_mats = zeros(Float32,3,3,24)
+    pose_view = reshape(pose,(3,55))
+    rot_mats = zeros(Float32,3,3,55)
     @inbounds for i in axes(rot_mats,3)
-        rot_mats[:,:,i] = rodrigues(pose_view[:,i])
+        @views rot_mats[:,:,i] = rodrigues(pose_view[:,i])
     end
     
     pose_feature = permutedims(rot_mats[:,:,2:end],[2,1,3]) .- Matrix{Float32}(1I,3,3)
     
-    pose_offsets = reshape(reshape(pose_feature,(1,:))*smpl.posedirs,(:,3))
+    pose_offsets = reshape(reshape(pose_feature,(1,:))*smplx.posedirs,(:,3))
     
     v_posed = pose_offsets + v_shaped
     
     
-    J_transformed, A = rigid_transform_smpl(rot_mats,J',smpl.parents.+1)
+    J_transformed, A = rigid_transform_smplx(rot_mats,J',smplx.parents.+1)
     
-    T = reshape(reshape(A,(:,24))*smpl.lbs_weights',(4,4,:))
+    T = reshape(reshape(A,(:,55))*smplx.lbs_weights',(4,4,:))
     
-    v_posed_homo = vcat(v_posed',ones(Float32,1,6890))
+    v_posed_homo = vcat(v_posed',ones(Float32,1,10475))
 
-    v_homo = zeros(Float32,4,6890)
-    @inbounds @simd for i = 1:6890
-        v_homo[:,i] = T[:,:,i] * v_posed_homo[:,i]
+    v_homo = zeros(Float32,4,10475)
+    @inbounds for i = 1:10475
+        @views mul!(v_homo[:,i], T[:,:,i], v_posed_homo[:,i])
     end
 
     # v_homo = zeros(Float32,4,6890)
+
     # loop_einsum!(EinCode((('i','j', 'k'),('j','k')),('i','k')),(T,v_posed_homo),v_homo)
 
     verts = @views v_homo[1:3,:] .+ trans[:,[CartesianIndex()]]
@@ -75,20 +77,21 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},
                     "v_posed" => v_posed,
                     "v_shaped" => v_shaped,
                     "J_transformed" => J_transformed,
-                    "f" => smpl.f)
+                    "f" => smplx.f)
     return output
         
 end
 
 
-function rigid_transform_smpl(rot_mats,joints,parents)
+
+function rigid_transform_smplx(rot_mats,joints,parents)
     
     rel_joints = copy(joints)
     rel_joints[:,2:end] -= joints[:,parents[2:end]]
 
-    transforms_mat = zeros(Float32,4,4,24)
+    transforms_mat = zeros(Float32,4,4,55)
 
-    for i = 1:24
+    for i = 1:55
         transforms_mat[1:3,1:3,i] = rot_mats[:,:,i]
         transforms_mat[1:3,4,i] = rel_joints[:,i]
         transforms_mat[4,4,i] = 1
@@ -99,7 +102,7 @@ function rigid_transform_smpl(rot_mats,joints,parents)
     transforms = zeros(Float32,size(transforms_mat))
     transforms[:,:,1] = transforms_mat[:,:,1]
     
-    for i=2:24
+    for i=2:55
         transforms[:,:,i] = transforms[:,:,parents[i]] * transforms_mat[:,:,i]
     end
     
@@ -108,8 +111,8 @@ function rigid_transform_smpl(rot_mats,joints,parents)
     
     joints_homo = vcat(joints,zeros(Float32,1,size(joints,2)))
 
-    init_bone = zeros(Float32,4,24)
-    for i = 1:24
+    init_bone = zeros(Float32,4,55)
+    for i = 1:55
         init_bone[:,i] = transforms[:,:,i]*joints_homo[:,i]
     end
 
@@ -121,20 +124,29 @@ end
 
 
 
-function vertices2joints_smpl(J_regressor,vertices)
+
+function vertices2joints_smplx(J_regressor,vertices)
     
-    return reshape(J_regressor*reshape(vertices,(6890,:)),(24,3,:))
+    return reshape(J_regressor*reshape(vertices,(10475,:)),(55,3,:))
     
+    end
+
+
+
+function shape_correction(smplx::SMPLXdata, betas::Array{Float32,1})
+    v_shaped = smplx.v_template + reshape((@view smplx.shapedirs[:,1:length(betas)]) * betas,(10475,3))
+
 end
 
 
-function pivot_fk(smpl::SMPLdata,betas::Array{Float32,1},poses::Array{Float32,2},contacts::Array{Float32,2},trans::Array{Float32,1}=zeros(Float32,3))
+
+function pivot_fk(smplx::SMPLXdata,betas::Array{Float32,1},poses::Array{Float32,2},contacts::Array{Float32,2},trans::Array{Float32,1}=zeros(Float32,3))
     """pose input (3x3)x24 : batch of 24 of 3x3 rotation matrices  """
     
-    verts = zeros(3,6890,size(poses,2));
-    joints = zeros(4,4,24,size(poses,2));
-    ot = smpl_lbs(smpl,betas,poses[:,1]);
-    v_ot, j_ot = ot["vertices"], ot["J_transformed"] 
+    verts = zeros(3,10475,size(poses,2));
+    joints = zeros(4,4,55,size(poses,2));
+    ot = smpl_lbs(smplx,betas,poses[:,1]);
+    v_ot, j_ot = ot["vertices"], ot["J_transformed"]
     verts[:,:,1] = v_ot .+ trans[:,[CartesianIndex()]]
     joints[:,:,:,1] = j_ot
     joints[1:3,4,:,1] .+= trans[:,[CartesianIndex()]]
@@ -142,7 +154,7 @@ function pivot_fk(smpl::SMPLdata,betas::Array{Float32,1},poses::Array{Float32,2}
     # contact joints
     contact_joints = argmax(contacts,dims=1)
     for (idx,cj) in enumerate(contact_joints[1:end-1])
-        v_ot_fut, _, j_ot_fut = smpl_lbs(smpl,betas,poses[:,idx+1])
+        v_ot_fut, _, j_ot_fut = smpl_lbs(smplx,betas,poses[:,idx+1])
         
         # all the joints relative to the contact joint
         cj_inv_pose = inv(j_ot_fut[:,:,cj[1]])

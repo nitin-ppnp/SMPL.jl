@@ -1,5 +1,33 @@
 using NPZ; npz=NPZ
+using SharedArrays;
+using Distributed;
+using StaticTools;
+using OMEinsum;
 using DataDeps;
+
+struct SMPLStaticdata
+    v_template::MallocMatrix{Float32,}
+    shapedirs::MallocArray{Float32,3}
+    posedirs::MallocMatrix{Float32}
+    J_regressor::MallocMatrix{Float32}
+    parents::MallocVector{UInt32}
+    lbs_weights::MallocMatrix{Float32}
+    f::MallocMatrix{UInt32}
+end
+
+function createStaticSMPL(model_path)
+    """
+    """
+    model = NPZ.npzread(model_path);
+    smpl = SMPLStaticdata(MallocArray(Float32.(model["v_template"])),
+                MallocArray(Float32.(model["shapedirs"])),
+                MallocArray(Float32.(model["posedirs"])),
+                MallocArray(Float32.(model["J_regressor"])),
+                MallocArray(UInt32.(model["kintree_table"][1,:])),
+                MallocArray(Float32.(model["weights"])),
+                MallocArray(UInt32.(model["f"].+1)))        # python to julia indexing
+    return smpl
+end
 
 struct SMPLdata
     v_template::Array{Float32,2}
@@ -66,17 +94,52 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},
     end
 
     # v_homo = zeros(Float32,4,6890)
+
     # loop_einsum!(EinCode((('i','j', 'k'),('j','k')),('i','k')),(T,v_posed_homo),v_homo)
 
-    verts = @views v_homo[1:3,:] .+ trans[:,[CartesianIndex()]]
+    verts = v_homo[1:3,:]
+    return verts.+trans[:,[CartesianIndex()]], J_transformed.+trans[:,[CartesianIndex()]]
+        
+end
 
-    output = Dict("vertices" => verts, 
-                    "joints" => J_transformed[1:3,4,:].+trans[:,[CartesianIndex()]],
-                    "v_posed" => v_posed,
-                    "v_shaped" => v_shaped,
-                    "J_transformed" => J_transformed,
-                    "f" => smpl.f)
-    return output
+
+function smpl_lbs_static(smpl::SMPLStaticdata,betas::MallocVector{Float32},pose::MallocVector{Float32},trans::MallocVector{Float32})
+    """pose input (3x3)x24 : batch of 24 of 3x3 rotation matrices  """
+    
+    v_shaped = smpl.v_template + reshape(reshape(smpl.shapedirs,(6890*3,:))*betas,(6890,3))
+    
+    J = smpl.J_regressor*v_shaped
+    
+    pose_view = reshape(pose,(3,24))
+    rot_mats = zeros(Float32,3,3,24)
+    @inbounds for i in axes(rot_mats,3)
+        rot_mats[:,:,i] = rodrigues(pose_view[:,i])
+    end
+    
+    pose_feature = permutedims(rot_mats[:,:,2:end],[2,1,3]) .- Matrix{Float32}(1I,3,3)
+    
+    pose_offsets = reshape(reshape(pose_feature,(1,:))*smpl.posedirs,(3,:))'
+    
+    v_posed = pose_offsets + v_shaped
+    
+    
+    J_transformed, A = rigid_transform(rot_mats,J',smpl.parents.+1)
+    
+    T = reshape(reshape(A,(:,24))*smpl.lbs_weights',(4,4,:))
+    
+    v_posed_homo = vcat(v_posed',ones(Float32,1,6890))
+
+    v_homo = zeros(Float32,4,6890)
+    @inbounds @simd for i = 1:6890
+        v_homo[:,i] = T[:,:,i] * v_posed_homo[:,i]
+    end
+
+    # v_homo = zeros(Float32,4,6890)
+
+    # loop_einsum!(EinCode((('i','j', 'k'),('j','k')),('i','k')),(T,v_posed_homo),v_homo)
+
+    verts = v_homo[1:3,:]
+    return verts.+trans[:,[CartesianIndex()]], J_transformed.+trans[:,[CartesianIndex()]]
         
 end
 
@@ -103,7 +166,7 @@ function rigid_transform_smpl(rot_mats,joints,parents)
         transforms[:,:,i] = transforms[:,:,parents[i]] * transforms_mat[:,:,i]
     end
     
-    posed_joints = copy(transforms)
+    posed_joints = transforms[1:3,4,:]
 
     
     joints_homo = vcat(joints,zeros(Float32,1,size(joints,2)))
@@ -125,57 +188,4 @@ function vertices2joints_smpl(J_regressor,vertices)
     
     return reshape(J_regressor*reshape(vertices,(6890,:)),(24,3,:))
     
-end
-
-
-function pivot_fk(smpl::SMPLdata,betas::Array{Float32,1},poses::Array{Float32,2},contacts::Array{Float32,2},trans::Array{Float32,1}=zeros(Float32,3))
-    """pose input (3x3)x24 : batch of 24 of 3x3 rotation matrices  """
-    
-    verts = zeros(3,6890,size(poses,2));
-    joints = zeros(4,4,24,size(poses,2));
-    ot = smpl_lbs(smpl,betas,poses[:,1]);
-    v_ot, j_ot = ot["vertices"], ot["J_transformed"] 
-    verts[:,:,1] = v_ot .+ trans[:,[CartesianIndex()]]
-    joints[:,:,:,1] = j_ot
-    joints[1:3,4,:,1] .+= trans[:,[CartesianIndex()]]
-
-    # contact joints
-    contact_joints = argmax(contacts,dims=1)
-    for (idx,cj) in enumerate(contact_joints[1:end-1])
-        v_ot_fut, _, j_ot_fut = smpl_lbs(smpl,betas,poses[:,idx+1])
-        
-        # all the joints relative to the contact joint
-        cj_inv_pose = inv(j_ot_fut[:,:,cj[1]])
-        rel_joints_ot_fut = stack([cj_inv_pose * j_ot_fut[:,:,i] for i in axes(j_ot_fut,3)])
-        
-        # joint_ot relative to past joint ot
-        joint_rel_past = inv(j_ot[:,:,cj[1]]) * j_ot_fut[:,:,cj[1]]
-
-        # check free fall
-        if false
-            vel = (out_joints[i,j,:3,3] - out_joints[i-1,j,:3,3]) * fps + \
-                torch.tensor(g).float().to(out_joints.device)/fps
-            # vel = torch.matmul(torch.linalg.inv(out_joints[i,j]),out_joints[i-1,j])[:3,3] * fps + \
-            #     torch.tensor(g).float().to(out_joints.device)/fps
-            joint_rel_past[:3,3] = torch.einsum("ak,k->a",torch.linalg.inv(joints_ot[i,j])[:3,:3],vel)/fps
-        else
-            joint_rel_past[1:3,4] .= 0
-        end
-
-        # rotate past joint with joint_ot relative to past joint_ot
-        rotated_fut_joint = joints[:,:,cj[1],idx] * joint_rel_past
-        # place future pose_ot at past joint
-        joints[:,:,:,idx+1] = stack([rotated_fut_joint * rel_joints_ot_fut[:,:,i] for i in axes(rel_joints_ot_fut,3)])
-        
-        # verts wrt contact joint ot
-        verts_wrt_cj_ot = cj_inv_pose[1:3,1:3] * v_ot_fut .+ cj_inv_pose[1:3,4]
-        verts[:,:,idx+1] = joints[1:3,1:3,cj[1],idx+1] * verts_wrt_cj_ot .+ joints[1:3, 4, cj[1], idx+1]
-
-        # 
-        j_ot = j_ot_fut
-    end
-
-
-    return verts, joints
-        
 end
