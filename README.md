@@ -1,5 +1,5 @@
-# SMPL
-Julia implementation of Skinned Multi-Person Linear model (SMPL). It is based on the pytorch implementation https://github.com/vchoutas/smplx
+# SMPL, SMPLX and SUPR
+Julia implementation of human body models in the SMPL family.
 
 ![](resources/smpl.gif)
 
@@ -52,6 +52,18 @@ vertices_smplx = output_smplx["vertices"];
 vertices_supr = output_supr["vertices"];
 ```
 
+## Test the package
+Once you have all the three models (SMPL/SMPLX/SUPR) downloaded, run the unit tests by
+```
+]test
+```
 
-# Benchmarking
+
+## Benchmarking
+### System Specifications
+- **Operating System**: Windows 11 Pro
+- **Processor**: 12th Gen Intel(R) Core(TM) i7-1280P   1.80 GHz
+- **Memory**: 32.0 GB (31.6 GB usable)
+
+### Benchmarking Results
 - Current smpl_lbs impl: 2.617 ms

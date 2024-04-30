@@ -8,4 +8,6 @@ data
 *.mp4
 *.mkv
 
+!test/*.npz
+
 .vscode/
