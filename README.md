@@ -54,4 +54,10 @@ vertices_supr = output_supr["vertices"];
 
 
 # Benchmarking
+## System Specifications
+- **Operating System**: Windows 11 Pro
+- **Processor**: 12th Gen Intel(R) Core(TM) i7-1280P   1.80 GHz
+- **Memory**: 32.0 GB (31.6 GB usable)
+
+## Benchmarking Results
 - Current smpl_lbs impl: 2.617 ms
