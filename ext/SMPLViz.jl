@@ -1,5 +1,17 @@
-########################## Viz ###########################
+module SMPLViz
+
 using GLMakie
+using SMPL
+
+function viz_supr(supr::SUPRdata,betas::Array{Float32,1},pose::Array{Float32,1};kwargs...)
+    verts = smpl_lbs(supr,betas,pose)["vertices"]
+    f = Figure()
+    scene = LScene(f[1,1],show_axis=false)
+    mesh!(scene,verts',supr.f;kwargs...)
+    cam = cameracontrols(scene)
+    rotate_cam!(scene.scene,cam,(-0.95, -2.365, 0))
+    return f
+end
 
 function viz_smpl(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1};kwargs...)
     verts,J = smpl_lbs(smpl,betas,pose)
@@ -128,4 +140,6 @@ function viz_skel(joints; bones=nothing,
             sleep(tsleep)
         end
     end
+end
+    
 end

@@ -4,7 +4,6 @@ using SparseArrays;
 using SharedArrays;
 using Distributed;
 using TensorOperations;
-using GLMakie;
 
 struct SUPRdata
     v_template::Array{Float32,2}
@@ -162,18 +161,4 @@ function smpl_lbs(supr::SUPRdata,betas::Array{Float32,1},pose::Array{Float32,2})
     end
     
     return output
-end
-
-
-
-#############################################################################
-
-function viz_supr(supr::SUPRdata,betas::Array{Float32,1},pose::Array{Float32,1};kwargs...)
-    verts = smpl_lbs(supr,betas,pose)["vertices"]
-    f = Figure()
-    scene = LScene(f[1,1],show_axis=false)
-    mesh!(scene,verts',supr.f;kwargs...)
-    cam = cameracontrols(scene)
-    rotate_cam!(scene.scene,cam,(-0.95, -2.365, 0))
-    return f
 end
