@@ -179,3 +179,7 @@ function pivot_fk(smpl::SMPLdata,betas::Array{Float32,1},poses::Array{Float32,2}
     return verts, joints
         
 end
+
+function viz_smpl()
+    nothing
+end

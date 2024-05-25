@@ -3,18 +3,8 @@ uuid = "582f87bb-3f4e-434f-ae83-4e6429f489ab"
 authors = ["Nitin <nitin.ppnp@gmail.com>"]
 version = "0.1.0"
 
-[weakdeps]
-GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
-
-[compat]
-GLMakie = "0.10.2"
-
-[extensions]
-SMPLViz = "GLMakie"
-
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
-Cthulhu = "f68482b8-f384-11e8-15f7-abe071a5a75f"
 DataDeps = "124859b0-ceae-595e-8997-d05f6a7a8dfe"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
@@ -29,7 +19,14 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StaticTools = "86c06d3c-3f03-46de-9781-57580aa96d0a"
 TensorOperations = "6aa20fa7-93e2-5fca-9bc0-fbd0db3c71a2"
 
+[weakdeps]
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+
+[extensions]
+SMPLViz = "GLMakie"
+
 [compat]
+GLMakie = "0.10.2"
 julia = "1"
 
 [extras]
