@@ -45,7 +45,7 @@ function smpl_lbs(smplx::SMPLXdata,betas::Array{Float32,1},pose::Array{Float32,1
     pose_view = reshape(pose,(3,55))
     rot_mats = zeros(Float32,3,3,55)
     @inbounds for i in axes(rot_mats,3)
-        @views rot_mats[:,:,i] = rodrigues(pose_view[:,i])
+        rot_mats[:,:,i] = rodrigues(pose_view[:,i])
     end
     
     pose_feature = permutedims(rot_mats[:,:,2:end],[2,1,3]) .- Matrix{Float32}(1I,3,3)
@@ -140,7 +140,7 @@ end
 
 
 
-function pivot_fk(smplx::SMPLXdata,betas::Array{Float32,1},poses::Array{Float32,2},contacts::Array{Float32,2},trans::Array{Float32,1}=zeros(Float32,3))
+function pivot_fk(smplx::SMPLXdata,betas::Array{Float32,1},poses::Array{Float32,2},contacts::Array{Float32,2},trans::Array{Float32,1}=zeros(Float32,3);fps=30.0,g=[0.0,0.0,-9.8])
     """pose input (3x3)x24 : batch of 24 of 3x3 rotation matrices  """
     
     verts = zeros(3,10475,size(poses,2));
@@ -154,7 +154,8 @@ function pivot_fk(smplx::SMPLXdata,betas::Array{Float32,1},poses::Array{Float32,
     # contact joints
     contact_joints = argmax(contacts,dims=1)
     for (idx,cj) in enumerate(contact_joints[1:end-1])
-        v_ot_fut, _, j_ot_fut = smpl_lbs(smplx,betas,poses[:,idx+1])
+        out = smpl_lbs(smplx,betas,poses[:,idx+1])
+        v_ot_fut, j_ot_fut = out["vertices"], out["J_transformed"] 
         
         # all the joints relative to the contact joint
         cj_inv_pose = inv(j_ot_fut[:,:,cj[1]])
@@ -164,12 +165,24 @@ function pivot_fk(smplx::SMPLXdata,betas::Array{Float32,1},poses::Array{Float32,
         joint_rel_past = inv(j_ot[:,:,cj[1]]) * j_ot_fut[:,:,cj[1]]
 
         # check free fall
-        if false
-            vel = (out_joints[i,j,:3,3] - out_joints[i-1,j,:3,3]) * fps + \
-                torch.tensor(g).float().to(out_joints.device)/fps
+        if (contacts[:,cj[2]] != zeros(Float32,22)) && (contacts[:,cj[2]+1] == zeros(Float32,22))
+            vel = (joints[1:3,4,cj[1],cj[2]] -
+                    joints[1:3,4,cj[1],cj[2]-1]) * fps
             # vel = torch.matmul(torch.linalg.inv(out_joints[i,j]),out_joints[i-1,j])[:3,3] * fps + \
             #     torch.tensor(g).float().to(out_joints.device)/fps
-            joint_rel_past[:3,3] = torch.einsum("ak,k->a",torch.linalg.inv(joints_ot[i,j])[:3,:3],vel)/fps
+            println("!!!!velocity: ",vel[3])
+
+            joint_rel_past[1:3,4] = Float32.((inv(j_ot_fut[1:3,1:3,cj[1]])*vel)/fps)
+        elseif contacts[:,cj[2]] == zeros(Float32,22)
+        # if false
+            vel = (joints[1:3,4,cj[1],cj[2]] -
+                    joints[1:3,4,cj[1],cj[2]-1]) * fps +
+                    g/fps
+            # vel = torch.matmul(torch.linalg.inv(out_joints[i,j]),out_joints[i-1,j])[:3,3] * fps + \
+            #     torch.tensor(g).float().to(out_joints.device)/fps
+            println("velocity: ",vel[3])
+
+            joint_rel_past[1:3,4] = Float32.((inv(j_ot_fut[1:3,1:3,cj[1]])*vel)/fps)
         else
             joint_rel_past[1:3,4] .= 0
         end

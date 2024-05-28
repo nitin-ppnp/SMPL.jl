@@ -169,24 +169,45 @@ end
 using NPZ;
 
 # data = npzread("/home/nitin/nas/nitin/AMASS_SMPLX_NEUTRAL_contacts_v2/ACCAD/Female1General_c3d/A14_-_stand_to_skip_stageii.npz");
-data = npzread("/home/nitin/Downloads/A14_-_stand_to_skip_stageii.npz")
-# data = npzread("/home/nitin/Downloads/B10_-_walk_turn_left_(45)_stageii.npz")
+# data = npzread("/home/nitin/Downloads/A14_-_stand_to_skip_stageii.npz")
+data = npzread("/home/nitin/Downloads/B10_-_walk_turn_left_(45)_stageii.npz")
 
 # data = npzread("/home/nitin/nas/nitin/AMASS_SMPLX_NEUTRAL_contacts_v2/ACCAD/Female1Walking_c3d/B10_-_walk_turn_left_(45)_stageii.npz");
 
 probs = 100 .* Float64.(data["probs"]'[1:22,:]);
-# probs[probs.<0] .= 0;
-# contacts = zero.(probs);
-# contacts[argmax(probs,dims=1)] .= probs[argmax(probs,dims=1)]
+probs[probs.<0] .= 0;
+contacts = zero.(probs);
+contacts[argmax(probs,dims=1)] .= probs[argmax(probs,dims=1)]
 # for i in 1:size(probs,2)
 #     maximum(probs[:,i])
 # argmax(probs,2)
 
+using SMPL
+# data2 = npzread("/home/nitin/nas/datasets/AMASS/AMASS_SMPLX_NEUTRAL_smplFormat/ACCAD/Female1General_c3d/A14_-_stand_to_skip_stageii.smpl")
+data2 = npzread("/home/nitin/nas/datasets/AMASS/AMASS_SMPLX_NEUTRAL_smplFormat/ACCAD/Female1Walking_c3d/B10_-_walk_turn_left_(45)_stageii.smpl")
+poses = Array(Float32.(reshape(permutedims(data2["bodyPose"],(3,2,1)),(66,:))));
+poses = cat(poses,zeros(Float32,55*3-66,size(poses,2));dims=1)
+trans = Float32.(data2["bodyTranslation"]')
+betas = zeros(Float32,10)
+
+smplx_neutral = create_smplx_neutral()
+
+fk_verts, fk_joints = pivot_fk(smplx_neutral,
+                            betas,
+                            poses,
+                            Float32.(probs),
+                            trans[:,1],
+                            fps=data2["frameRate"]);
+
+verts = [smpl_lbs(smplx_neutral,betas,poses[:,i],trans[:,i])["vertices"] for i in axes(poses,2)];
+vertices = stack(verts)
+
+viz = viz_meshes([Float64.(fk_verts), Float64.(vertices)], data["f"].+1, show_fig=true, tsleep=1/100)
 
 # viz_skel(Float64.(data["contact_fk_vertices"]), contacts=probs, show=true, markersize=0.03,colormap=:Greens)
 
 # viz = viz_meshes([Float64.(data["contact_fk_vertices"]), Float64.(data["vertices"])], data["f"].+1, show_fig=true, tsleep=1/100)
-viz = viz_skels([Float64.(data["contact_fk_joints"]), Float64.(data["joints"][:,1:22,:])], contacts=contacts, show_fig=true, tsleep=1/100)
+# viz = viz_skels([Float64.(data["contact_fk_joints"]), Float64.(data["joints"][:,1:22,:])], contacts=contacts, show_fig=true, tsleep=1/100)
 
 
 # # plotting
