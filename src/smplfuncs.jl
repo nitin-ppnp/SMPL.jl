@@ -1,14 +1,14 @@
 using NPZ; npz=NPZ
 using DataDeps;
 
-struct SMPLdata
-    v_template::Array{Float32,2}
-    shapedirs::Array{Float32,2}
-    posedirs::Array{Float32,2}
-    J_regressor::Array{Float32,2}
-    parents::Array{UInt32,1}
-    lbs_weights::Array{Float32,2}
-    f::Array{UInt32,2}
+mutable struct SMPLdata
+    v_template::AbstractArray{Float32,2}
+    shapedirs::AbstractArray{Float32,2}
+    posedirs::AbstractArray{Float32,2}
+    J_regressor::AbstractArray{Float32,2}
+    parents::AbstractArray{UInt32,1}
+    lbs_weights::AbstractArray{Float32,2}
+    f::AbstractArray{UInt32,2}
 end
 
 
@@ -34,7 +34,7 @@ function create_smpl(model_path)
 end
 
 
-function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},trans::Array{Float32,1}=zeros(Float32,3))
+function smpl_lbs(smpl::SMPLdata,betas,pose,trans=zeros(Float32,3))
     """pose input (3x3)x24 : batch of 24 of 3x3 rotation matrices  """
     
     v_shaped = smpl.v_template + reshape((@view smpl.shapedirs[:,1:length(betas)]) * betas,(6890,3))
@@ -42,12 +42,12 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},
     J = smpl.J_regressor*v_shaped
     
     pose_view = reshape(pose,(3,24))
-    rot_mats = zeros(Float32,3,3,24)
+    rot_mats = similar(pose,3,3,24)
     @inbounds for i in axes(rot_mats,3)
         rot_mats[:,:,i] = rodrigues(pose_view[:,i])
     end
     
-    pose_feature = permutedims(rot_mats[:,:,2:end],[2,1,3]) .- Matrix{Float32}(1I,3,3)
+    pose_feature = permutedims(rot_mats[:,:,2:end],[2,1,3]) .- oneArray(Matrix{Float32}(1I,3,3))
     
     pose_offsets = reshape(reshape(pose_feature,(1,:))*smpl.posedirs,(:,3))
     
@@ -60,9 +60,9 @@ function smpl_lbs(smpl::SMPLdata,betas::Array{Float32,1},pose::Array{Float32,1},
     
     v_posed_homo = vcat(v_posed',ones(Float32,1,6890))
 
-    v_homo = zeros(Float32,4,6890)
-    @inbounds @simd for i = 1:6890
-        v_homo[:,i] = T[:,:,i] * v_posed_homo[:,i]
+    v_homo = oneArray(zeros(Float32,4,6890))
+    for i = 1:6890
+        v_homo[:,i] .= T[:,:,i] * v_posed_homo[:,i]
     end
 
     # v_homo = zeros(Float32,4,6890)
@@ -86,29 +86,29 @@ function rigid_transform_smpl(rot_mats,joints,parents)
     rel_joints = copy(joints)
     rel_joints[:,2:end] -= joints[:,parents[2:end]]
 
-    transforms_mat = zeros(Float32,4,4,24)
+    transforms_mat = oneArray(zeros(Float32,4,4,24))
 
+    transforms_mat[4,4,:] .= 1
     for i = 1:24
-        transforms_mat[1:3,1:3,i] = rot_mats[:,:,i]
-        transforms_mat[1:3,4,i] = rel_joints[:,i]
-        transforms_mat[4,4,i] = 1
+        transforms_mat[1:3,1:3,i] .= rot_mats[:,:,i]
+        transforms_mat[1:3,4,i] .= rel_joints[:,i]
     end
 
     # transforms_mat = cat([vcat(hcat(rot_mats[:,:,i],rel_joints[:,i]),[0 0 0 1]) for i = 1:size(rot_mats)[3]]...,dims=3)
     
-    transforms = zeros(Float32,size(transforms_mat))
-    transforms[:,:,1] = transforms_mat[:,:,1]
+    transforms = oneArray(zeros(Float32,size(transforms_mat)))
+    transforms[:,:,1] .= transforms_mat[:,:,1]
     
     for i=2:24
-        transforms[:,:,i] = transforms[:,:,parents[i]] * transforms_mat[:,:,i]
+        transforms[:,:,i] .= transforms[:,:,parents[i]] * transforms_mat[:,:,i]
     end
     
     posed_joints = copy(transforms)
 
     
-    joints_homo = vcat(joints,zeros(Float32,1,size(joints,2)))
+    joints_homo = vcat(joints,oneArray(zeros(Float32,1,size(joints,2))))
 
-    init_bone = zeros(Float32,4,24)
+    init_bone = oneArray(zeros(Float32,4,24))
     for i = 1:24
         init_bone[:,i] = transforms[:,:,i]*joints_homo[:,i]
     end
