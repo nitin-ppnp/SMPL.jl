@@ -1,5 +1,7 @@
 using NPZ; npz=NPZ
 using DataDeps;
+using KernelAbstractions; ka=KernelAbstractions
+using Adapt;
 
 mutable struct SMPLdata
     v_template::AbstractArray{Float32,2}
@@ -60,15 +62,15 @@ function smpl_lbs(smpl::SMPLdata,betas,pose,trans=zeros(Float32,3))
     
     v_posed_homo = vcat(v_posed',ones(Float32,1,6890))
 
-    v_homo = oneArray(zeros(Float32,4,6890))
-    for i = 1:6890
+    v_homo = adapt(ka.get_backend(pose), zeros(Float32,4,6890))
+    @views @inbounds for i = 1:6890
         v_homo[:,i] .= T[:,:,i] * v_posed_homo[:,i]
     end
 
     # v_homo = zeros(Float32,4,6890)
     # loop_einsum!(EinCode((('i','j', 'k'),('j','k')),('i','k')),(T,v_posed_homo),v_homo)
 
-    verts = @views v_homo[1:3,:] .+ trans[:,[CartesianIndex()]]
+    verts = (@view v_homo[1:3,:]) .+ trans[:,[CartesianIndex()]]
 
     output = Dict("vertices" => verts, 
                     "joints" => J_transformed[1:3,4,:].+trans[:,[CartesianIndex()]],

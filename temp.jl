@@ -2,6 +2,7 @@ using Revise;
 using BenchmarkTools;
 using SMPL;
 using DataDeps;
+using KernelAbstractions; 
 
 # trans = ones(Float32,3);
 # poses = ones(Float32,165);
@@ -39,7 +40,7 @@ end
 
 setfield!(smpl,:parents,Array(getfield(smpl,:parents)))
 
-smpl_lbs(smpl,betas,poses,trans);
+output = smpl_lbs(smpl,betas,poses,trans);
 
 
 
