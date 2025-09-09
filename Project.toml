@@ -9,6 +9,7 @@ Cthulhu = "f68482b8-f384-11e8-15f7-abe071a5a75f"
 DataDeps = "124859b0-ceae-595e-8997-d05f6a7a8dfe"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+FilePathsBase = "48062228-2e41-5def-b9a4-89aafe57970f"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -22,6 +23,7 @@ StaticTools = "86c06d3c-3f03-46de-9781-57580aa96d0a"
 TensorOperations = "6aa20fa7-93e2-5fca-9bc0-fbd0db3c71a2"
 
 [compat]
+FilePathsBase = "0.9.24"
 julia = "1"
 
 [extras]

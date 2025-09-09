@@ -7,7 +7,7 @@ trans = ones(Float32,3);
 poses = ones(Float32,165);
 betas = ones(Float32, 400);
 
-smplx = create_smplx("./data/SMPLX_NEUTRAL.npz");
+smplx = create_smplx(joinpath(datadep"SMPLX_models","SMPLX_NEUTRAL.npz"));
 
 @btime smpl_lbs($smplx,$betas,$poses,$trans);
 
