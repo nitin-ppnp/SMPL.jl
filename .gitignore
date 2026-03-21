@@ -1,3 +1,4 @@
+credentials.toml
 .DS_Store
 /Manifest.toml
 /dev/
@@ -7,7 +8,15 @@ data
 *.npz
 *.mp4
 *.mkv
+*.smplbin
+*.pb.gz
+build/
 
 !test/*.npz
 
 .vscode/
+.claude/settings.local.json
+
+# Generated test renders
+scripts/frame_*.png
+scripts/sidebyside.png

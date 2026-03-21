@@ -1,33 +1,46 @@
 name = "SMPL"
 uuid = "582f87bb-3f4e-434f-ae83-4e6429f489ab"
-authors = ["Nitin <nitin.ppnp@gmail.com>"]
 version = "0.1.0"
+authors = ["Nitin <nitin.ppnp@gmail.com>"]
 
 [deps]
-BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
-Cthulhu = "f68482b8-f384-11e8-15f7-abe071a5a75f"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 DataDeps = "124859b0-ceae-595e-8997-d05f6a7a8dfe"
-Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
-Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 FilePathsBase = "48062228-2e41-5def-b9a4-89aafe57970f"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-LoopVectorization = "bdcacae8-1622-11e9-2a5c-532679323890"
 NPZ = "15e1cf62-19b3-5cfa-8e77-841668bca605"
-OMEinsum = "ebe7aa44-baf0-506c-a96f-8464559b3922"
-Observables = "510215fc-4207-5dde-b226-833fc4488ee2"
-SharedArrays = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
-StaticTools = "86c06d3c-3f03-46de-9781-57580aa96d0a"
-TensorOperations = "6aa20fa7-93e2-5fca-9bc0-fbd0db3c71a2"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+
+[weakdeps]
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+
+[extensions]
+AdaptExt = "Adapt"
+MakieExt = "Makie"
 
 [compat]
+CairoMakie = "0.15.9"
 FilePathsBase = "0.9.24"
-julia = "1"
+GLMakie = "0.13.9"
+StaticArrays = "1"
+julia = "1.9"
 
 [extras]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Cthulhu = "f68482b8-f384-11e8-15f7-abe071a5a75f"
+Debugger = "31a5f54b-26ea-5ae9-a837-f05ce5417438"
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
+Observables = "510215fc-4207-5dde-b226-833fc4488ee2"
+PProf = "e4faabce-9ead-11e9-39d9-4379958e3056"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+WGLMakie = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 
 [targets]
 test = ["Test"]
