@@ -57,6 +57,7 @@ SMPL.forward_kinematics
 
 ```@docs
 SMPL.load_motion
+SMPL.load_pivot_labels
 ```
 
 ## Visualization

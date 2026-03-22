@@ -4,10 +4,11 @@ version = "0.1.0"
 authors = ["Nitin <nitin.ppnp@gmail.com>"]
 
 [deps]
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 DataDeps = "124859b0-ceae-595e-8997-d05f6a7a8dfe"
 FilePathsBase = "48062228-2e41-5def-b9a4-89aafe57970f"
-GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NPZ = "15e1cf62-19b3-5cfa-8e77-841668bca605"
@@ -17,7 +18,6 @@ StaticTools = "86c06d3c-3f03-46de-9781-57580aa96d0a"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
 [weakdeps]
-Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 
 [extensions]
@@ -25,6 +25,8 @@ AdaptExt = "Adapt"
 MakieExt = "Makie"
 
 [compat]
+Adapt = "4.5.0"
+CUDA = "5.11.0"
 CairoMakie = "0.15.9"
 FilePathsBase = "0.9.24"
 GLMakie = "0.13.9"

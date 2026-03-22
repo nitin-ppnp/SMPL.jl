@@ -40,8 +40,10 @@ using LinearAlgebra: I
 #   :y → rotate Y-up to Z-up: maps (x,y,z)→(x,-z,y) so +Y (height) becomes +Z
 function _up_rotation(up::Symbol) :: Matrix{Float32}
     up == :z && return Matrix{Float32}(I, 3, 3)
-    # :y — rotate to Z-up: maps Y→Z, Z→-Y
-    return Float32[1 0 0; 0 0 1; 0 -1 0]
+    # :y — rotate Y-up to Z-up: maps (x,y,z)→(x,-z,y) so +Y height becomes +Z in Makie
+    # verts * R' with R=[1 0 0; 0 0 -1; 0 1 0] gives R'=[1 0 0; 0 0 1; 0 -1 0]
+    # and [x,y,z]*R' = [x, -z, y] — Y column maps to output Z. ✓
+    return Float32[1 0 0; 0 0 -1; 0 1 0]
 end
 
 # Compute a Rect3f that tightly contains the entire motion trajectory (after
@@ -149,6 +151,106 @@ end
 
 
 # ---------------------------------------------------------------------------
+# _pivot_markers! — add pivot probability markers (Observable path)
+# ---------------------------------------------------------------------------
+
+# Add pivot probability sphere markers to `scene`, reactive to `frame_obs`.
+# `joints_obs` is an Observable{Matrix{Float32}} of shape (N_j, 3) (already rotated).
+# Returns nothing if pivot_mode == :none or seq.pivot_joints === nothing.
+#
+# Design: always emits exactly N_tracked points to keep Observable vector length
+# constant across frame updates (Makie requirement). Non-highlighted joints use
+# alpha=0 (transparent).
+#   :max mode       — single vivid red sphere at the highest-scoring joint.
+#   :threshold mode — :plasma colormap (dark-purple→orange→yellow); all values
+#                     visible on the grey body mesh.
+# Joint positions are always within the body, so they fall inside the motion rect —
+# no Makie auto-limit expansion issue.
+function _pivot_markers!(
+    scene,
+    frame_obs            :: Observable{Int},
+    joints_obs           :: Observable{Matrix{Float32}},
+    seq                  :: SMPL.MotionSequence,
+    pivot_mode           :: Symbol,
+    pivot_threshold      :: Float32,
+    pivot_joint_indices  :: AbstractVector{Int},
+)
+    (pivot_mode == :none || isnothing(seq.pivot_joints)) && return
+
+    labels    = seq.pivot_joints          # (N_frames, N_tracked)
+    N_frames  = size(labels, 1)
+    N_tracked = size(labels, 2)
+    cmap      = Makie.to_colormap(:plasma)   # used only for :threshold mode
+
+    # colors_obs: (N_tracked,) RGBAf — alpha=0 hides non-highlighted joints
+    colors_obs = @lift begin
+        row  = labels[min($frame_obs, N_frames), :]   # (N_tracked,) scores for this frame
+        best = argmax(row)
+        if pivot_mode == :max
+            # Fixed vivid red — clearly visible on the grey body mesh
+            [RGBAf(1f0, 0f0, 0f0, k == best ? 1f0 : 0f0) for k in 1:N_tracked]
+        else  # :threshold
+            probs = clamp.(row, 0f0, 1f0)
+            cols  = map(p -> Makie.interpolated_getindex(cmap, p), probs)
+            [RGBAf(cols[k].r, cols[k].g, cols[k].b,
+                   row[k] >= pivot_threshold ? 1f0 : 0f0) for k in 1:N_tracked]
+        end
+    end
+
+    # positions_obs: always emit all N_tracked joint positions (fixed-length vector)
+    positions_obs = @lift begin
+        jnts = $joints_obs   # (N_j, 3)
+        [Point3f(jnts[j, 1], jnts[j, 2], jnts[j, 3]) for j in pivot_joint_indices]
+    end
+
+    meshscatter!(scene, positions_obs;
+                 markersize = 0.05f0, color = colors_obs)
+    return nothing
+end
+
+
+# ---------------------------------------------------------------------------
+# _render_pivot_markers! — add pivot probability markers (non-Observable path)
+# ---------------------------------------------------------------------------
+
+# Non-reactive version for render_frame: takes a concrete SMPLOutput and frame index.
+# Draws meshscatter directly with plain vectors (no Observable wiring needed).
+# Color scheme matches _pivot_markers!: red for :max, :plasma for :threshold.
+function _render_pivot_markers!(
+    scene,
+    out                  :: SMPL.SMPLOutput,
+    seq                  :: SMPL.MotionSequence,
+    frame                :: Int,
+    R                    :: Matrix{Float32},
+    pivot_mode           :: Symbol,
+    pivot_threshold      :: Float32,
+    pivot_joint_indices  :: AbstractVector{Int},
+)
+    labels    = seq.pivot_joints          # (N_frames, N_tracked)
+    N_tracked = size(labels, 2)
+    row       = labels[frame, :]          # (N_tracked,) scores
+    joints    = Array(out.joints) * R'    # (N_j, 3)
+    best      = argmax(row)
+
+    pts = [Point3f(joints[j, 1], joints[j, 2], joints[j, 3]) for j in pivot_joint_indices]
+
+    colors = if pivot_mode == :max
+        # Fixed vivid red — clearly visible on the grey body mesh
+        [RGBAf(1f0, 0f0, 0f0, k == best ? 1f0 : 0f0) for k in 1:N_tracked]
+    else  # :threshold
+        probs = clamp.(row, 0f0, 1f0)
+        cmap  = Makie.to_colormap(:plasma)
+        cols  = map(p -> Makie.interpolated_getindex(cmap, p), probs)
+        [RGBAf(cols[k].r, cols[k].g, cols[k].b,
+               row[k] >= pivot_threshold ? 1f0 : 0f0) for k in 1:N_tracked]
+    end
+
+    meshscatter!(scene, pts; markersize = 0.05f0, color = colors)
+    return nothing
+end
+
+
+# ---------------------------------------------------------------------------
 # bake_motion — pre-compute all vertices for a motion sequence
 # ---------------------------------------------------------------------------
 
@@ -234,7 +336,8 @@ end
 
 """
     viz_motion(model, seq::MotionSequence; show_skeleton=false,
-               fps_override=nothing, figure_kwargs...) -> Figure
+               pivot_mode=:none, pivot_threshold=0.5f0, pivot_joint_indices=1:23,
+               figure_kwargs...) -> Figure
 
 Open an interactive motion player window. The figure contains:
   - A 3D scene showing the body mesh (and optionally the skeleton).
@@ -253,22 +356,30 @@ Requires a display-capable backend (GLMakie). For headless rendering use
 - `model`: a `BodyModel` or `SUPRModel` (CPU or GPU).
 - `seq`:   a `MotionSequence` loaded with `load_motion`.
 - `show_skeleton`: overlay joint positions as spheres (default: false).
+- `pivot_mode`: `:none` (default), `:max` (highest-prob joint per frame), or
+  `:threshold` (all joints ≥ `pivot_threshold`). Requires `seq.pivot_joints`.
+- `pivot_threshold`: score threshold for `:threshold` mode (default: 0.5).
+- `pivot_joint_indices`: 1-indexed joint indices in the model that the columns
+  of `seq.pivot_joints` map to (default: `1:23` for SMPLX body joints).
 - `figure_kwargs`: forwarded to `Makie.Figure(...)`.
 
 # Example
 ```julia
 using SMPL, GLMakie
 model = create_smplx_neutral()
-seq   = load_motion("walk.smpl")
-fig   = viz_motion(model, seq; show_skeleton=true)
+seq   = load_motion("walk.smpl"; pivot_labels_path="walk_stageii.npy")
+fig   = viz_motion(model, seq; pivot_mode=:max)
 ```
 """
 function SMPL.viz_motion(model, seq::SMPL.MotionSequence;
-                         show_skeleton   :: Bool                  = false,
-                         camera_eye      :: Union{Nothing, Vec3f} = nothing,
-                         camera_lookat   :: Union{Nothing, Vec3f} = nothing,
-                         camera_upvector :: Vec3f                 = Vec3f(0f0, 0f0, 1f0),
-                         camera_fov      :: Float32               = 45f0,
+                         show_skeleton        :: Bool                  = false,
+                         pivot_mode           :: Symbol                = :none,
+                         pivot_threshold      :: Float32               = 0.5f0,
+                         pivot_joint_indices  :: AbstractVector{Int}   = 1:23,
+                         camera_eye           :: Union{Nothing, Vec3f} = nothing,
+                         camera_lookat        :: Union{Nothing, Vec3f} = nothing,
+                         camera_upvector      :: Vec3f                 = Vec3f(0f0, 0f0, 1f0),
+                         camera_fov           :: Float32               = 45f0,
                          figure_kwargs...)
     N_frames = size(seq.poses, 1)
     R    = _up_rotation(seq.up)
@@ -284,24 +395,20 @@ function SMPL.viz_motion(model, seq::SMPL.MotionSequence;
     _ground_plane!(scene.scene, rect)
     _origin_marker!(scene.scene, rect)
 
-    # Observable vertices — updated as frame_obs changes; rotation applied
-    verts_obs = @lift begin
-        i     = $frame_obs
-        out   = smpl_lbs(model, seq.betas, seq.poses[i, :], seq.trans[i, :])
-        Array(out.vertices) * R'   # (N_v, 3) rotated to Y-up
-    end
+    # Single smpl_lbs call per frame — shared by mesh, skeleton, and pivot markers
+    lbs_obs = @lift smpl_lbs(model, seq.betas, seq.poses[$frame_obs, :],
+                              seq.trans[$frame_obs, :])
 
-    mesh!(scene, verts_obs, faces;
-          color = :lightgray, shading = true)
+    verts_obs = @lift Array($lbs_obs.vertices) * R'   # (N_v, 3) rotated
+    mesh!(scene, verts_obs, faces; color = :lightgray, shading = true)
 
-    if show_skeleton
-        joints_obs = @lift begin
-            i   = $frame_obs
-            out = smpl_lbs(model, seq.betas, seq.poses[i, :], seq.trans[i, :])
-            Array(out.joints) * R'   # (N_j, 3) rotated
-        end
-        meshscatter!(scene, joints_obs;
-                     markersize = 0.02f0, color = :red)
+    need_joints = show_skeleton || (pivot_mode != :none && !isnothing(seq.pivot_joints))
+    if need_joints
+        joints_obs = @lift Matrix{Float32}(Array($lbs_obs.joints) * R')   # (N_j, 3)
+        show_skeleton && meshscatter!(scene, joints_obs;
+                                      markersize = 0.02f0, color = :red)
+        _pivot_markers!(scene.scene, frame_obs, joints_obs, seq,
+                        pivot_mode, pivot_threshold, pivot_joint_indices)
     end
 
     _setup_camera!(scene, rect;
@@ -433,7 +540,9 @@ end
     record_motion(model, seq::MotionSequence, outfile::String;
                   fps::Real = seq.fps,
                   resolution::Tuple{Int,Int} = (1920, 1080),
-                  show_skeleton::Bool = false) -> nothing
+                  show_skeleton::Bool = false,
+                  pivot_mode=:none, pivot_threshold=0.5f0,
+                  pivot_joint_indices=1:23) -> nothing
 
 Render all frames of `seq` and write a video file (`.mp4`, `.mkv`, `.gif`).
 
@@ -443,23 +552,27 @@ Works with any Makie backend:
   - **GLMakie** — uses an offscreen framebuffer; faster on a machine with a GPU.
 
 The output file format is determined by the extension of `outfile`.
+Pivot kwargs: see `viz_motion` for pivot visualization options.
 
 # Example
 ```julia
 using SMPL, CairoMakie
 model = create_smplx_neutral()
-seq   = load_motion("walk.smpl")
-record_motion(model, seq, "walk.mp4"; fps=30, resolution=(1280, 720))
+seq   = load_motion("walk.smpl"; pivot_labels_path="walk_stageii.npy")
+record_motion(model, seq, "walk.mp4"; fps=30, pivot_mode=:max)
 ```
 """
 function SMPL.record_motion(model, seq::SMPL.MotionSequence, outfile::String;
-                             fps             :: Real                  = seq.fps,
-                             resolution      :: Tuple{Int,Int}        = (1920, 1080),
-                             show_skeleton   :: Bool                  = false,
-                             camera_eye      :: Union{Nothing, Vec3f} = nothing,
-                             camera_lookat   :: Union{Nothing, Vec3f} = nothing,
-                             camera_upvector :: Vec3f                 = Vec3f(0f0, 0f0, 1f0),
-                             camera_fov      :: Float32               = 45f0)
+                             fps                  :: Real                  = seq.fps,
+                             resolution           :: Tuple{Int,Int}        = (1920, 1080),
+                             show_skeleton        :: Bool                  = false,
+                             pivot_mode           :: Symbol                = :none,
+                             pivot_threshold      :: Float32               = 0.5f0,
+                             pivot_joint_indices  :: AbstractVector{Int}   = 1:23,
+                             camera_eye           :: Union{Nothing, Vec3f} = nothing,
+                             camera_lookat        :: Union{Nothing, Vec3f} = nothing,
+                             camera_upvector      :: Vec3f                 = Vec3f(0f0, 0f0, 1f0),
+                             camera_fov           :: Float32               = 45f0)
     N_frames = size(seq.poses, 1)
     faces    = smpl_lbs(model, seq.betas, seq.poses[1,:], seq.trans[1,:]).faces
     R        = _up_rotation(seq.up)
@@ -471,21 +584,19 @@ function SMPL.record_motion(model, seq::SMPL.MotionSequence, outfile::String;
     _ground_plane!(scene.scene, rect)
     _origin_marker!(scene.scene, rect)
 
-    verts_obs = @lift begin
-        i   = $frame_obs
-        out = smpl_lbs(model, seq.betas, seq.poses[i,:], seq.trans[i,:])
-        Array(out.vertices) * R'
-    end
-    mesh!(scene, verts_obs, faces;
-          color = :lightgray, shading = true)
+    # Single smpl_lbs call per frame — shared by mesh, skeleton, and pivot markers
+    lbs_obs   = @lift smpl_lbs(model, seq.betas, seq.poses[$frame_obs,:],
+                                seq.trans[$frame_obs,:])
+    verts_obs = @lift Array($lbs_obs.vertices) * R'
+    mesh!(scene, verts_obs, faces; color = :lightgray, shading = true)
 
-    if show_skeleton
-        joints_obs = @lift begin
-            i   = $frame_obs
-            out = smpl_lbs(model, seq.betas, seq.poses[i,:], seq.trans[i,:])
-            Array(out.joints) * R'
-        end
-        meshscatter!(scene, joints_obs; markersize = 0.02f0, color = :red)
+    need_joints = show_skeleton || (pivot_mode != :none && !isnothing(seq.pivot_joints))
+    if need_joints
+        joints_obs = @lift Matrix{Float32}(Array($lbs_obs.joints) * R')   # (N_j, 3)
+        show_skeleton && meshscatter!(scene, joints_obs;
+                                      markersize = 0.02f0, color = :red)
+        _pivot_markers!(scene.scene, frame_obs, joints_obs, seq,
+                        pivot_mode, pivot_threshold, pivot_joint_indices)
     end
 
     _setup_camera!(scene, rect;
@@ -506,7 +617,9 @@ end
 """
     render_frame(model, seq::MotionSequence, frame::Int, outfile::String;
                  resolution::Tuple{Int,Int} = (1920, 1080),
-                 show_skeleton::Bool = false) -> nothing
+                 show_skeleton::Bool = false,
+                 pivot_mode=:none, pivot_threshold=0.5f0,
+                 pivot_joint_indices=1:23) -> nothing
 
 Render a single frame of `seq` and save it as a PNG (or any format supported
 by Makie.save, such as `.svg` when using CairoMakie).
@@ -515,26 +628,33 @@ by Makie.save, such as `.svg` when using CairoMakie).
 
 The `seq.up` field is used to orient the scene: `:z`-up sequences are
 automatically rotated so the body appears upright in the output image.
+Pivot kwargs: see `viz_motion` for pivot visualization options.
 
 # Example
 ```julia
 using SMPL, CairoMakie
 render_frame(model, seq, 42, "frame042.png"; resolution=(1280, 720))
+render_frame(model, seq, 42, "pivot042.png"; pivot_mode=:max)
 ```
 """
 function SMPL.render_frame(model, seq::SMPL.MotionSequence, frame::Int, outfile::String;
-                            resolution      :: Tuple{Int,Int}        = (1920, 1080),
-                            show_skeleton   :: Bool                  = false,
-                            camera_eye      :: Union{Nothing, Vec3f} = nothing,
-                            camera_lookat   :: Union{Nothing, Vec3f} = nothing,
-                            camera_upvector :: Vec3f                 = Vec3f(0f0, 0f0, 1f0),
-                            camera_fov      :: Float32               = 45f0)
+                            resolution           :: Tuple{Int,Int}        = (1920, 1080),
+                            show_skeleton        :: Bool                  = false,
+                            pivot_mode           :: Symbol                = :none,
+                            pivot_threshold      :: Float32               = 0.5f0,
+                            pivot_joint_indices  :: AbstractVector{Int}   = 1:23,
+                            camera_eye           :: Union{Nothing, Vec3f} = nothing,
+                            camera_lookat        :: Union{Nothing, Vec3f} = nothing,
+                            camera_upvector      :: Vec3f                 = Vec3f(0f0, 0f0, 1f0),
+                            camera_fov           :: Float32               = 45f0)
     R     = _up_rotation(seq.up)
     # Use a single-frame sequence for bounds so the scene is centred on this frame,
     # not stretched to cover the entire trajectory (which would make the body tiny).
+    pj_slice = isnothing(seq.pivot_joints) ? nothing :
+               seq.pivot_joints[frame:frame, :]   # (1, N_tracked)
     single = SMPL.MotionSequence(seq.poses[frame:frame,:], seq.betas,
                                  seq.trans[frame:frame,:], seq.fps,
-                                 seq.model_type, seq.gender, seq.up)
+                                 seq.model_type, seq.gender, seq.up, pj_slice)
     rect  = _motion_rect(single, R)
     faces = smpl_lbs(model, seq.betas, seq.poses[1,:], seq.trans[1,:]).faces
     out   = smpl_lbs(model, seq.betas, seq.poses[frame,:], seq.trans[frame,:])
@@ -550,6 +670,11 @@ function SMPL.render_frame(model, seq::SMPL.MotionSequence, frame::Int, outfile:
     if show_skeleton
         meshscatter!(scene, Array(out.joints) * R';
                      markersize = 0.02f0, color = :red)
+    end
+
+    if pivot_mode != :none && !isnothing(seq.pivot_joints)
+        _render_pivot_markers!(scene.scene, out, seq, frame, R,
+                               pivot_mode, pivot_threshold, pivot_joint_indices)
     end
 
     _setup_camera!(scene, rect;

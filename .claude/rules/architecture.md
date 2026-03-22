@@ -84,16 +84,25 @@ SUPR differs: step 2 uses affine J_regressor + bias; steps 3-4 use `quat_feat` (
 
 Auto-detected by key presence in the NPZ/SMPL file:
 
-| Key present | Format | Up axis | Pose shape |
+| Key present | Format | Up axis (auto) | Pose shape |
 |---|---|---|---|
 | `fullpose` | smplcodec v1 | `:y` | `(N,J,3)` → flat `(N,J*3)` |
 | `bodyPose` | smplcodec v2 (SMPLX) | `:z` | body+head+hands → `(N,165)` |
 | `poses` | AMASS npz | `:z` | already flat `(N,pose_dim)` |
 
-All three formats are Z-up in world coordinates: the root joint pose rotates the SMPL Y-up T-pose
-to Z-up world, so `smpl_lbs` output vertices have Z as height. Makie's LScene camera is also Z-up
-by default, so no vertex rotation is needed. The `up` field can be set to `:y` by callers loading
-data from Y-up sources.
+**smplcodec v1** stores the SMPL T-pose convention without a global Y→Z reorientation in the
+root rotation, so `smpl_lbs` output has Y as height (`:y`).
+
+**smplcodec v2 and AMASS npz** encode a Y→Z world flip in the root rotation, so `smpl_lbs`
+output has Z as height (`:z`). Makie's LScene camera is Z-up, so no extra rotation is needed
+for these formats.
+
+**Override with `up` kwarg**: some dataset variants (e.g. `AMASS_SMPLX_NEUTRAL_Yup_smplFormat`)
+use smplcodec v2 format but store Y-up data (root rotation encodes only the facing direction,
+not the Y→Z flip). Pass `up=:y` explicitly:
+```julia
+seq = load_motion("walk.smpl"; up=:y)
+```
 
 ## Visualization Extension (`ext/MakieExt.jl`)
 

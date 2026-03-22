@@ -51,7 +51,7 @@ export create_supr, create_supr_female, create_supr_male, create_supr_neutral
 export smpl_lbs, pivot_fk
 
 # --- Motion IO ---
-export load_motion
+export load_motion, load_pivot_labels
 
 # --- Visualization (populated by ext/MakieExt.jl when a Makie backend is loaded) ---
 
@@ -68,6 +68,7 @@ function bake_motion end
 
 """
     viz_motion(model, seq::MotionSequence; show_skeleton=false,
+               pivot_mode=:none, pivot_threshold=0.5f0, pivot_joint_indices=1:23,
                camera_eye=nothing, camera_lookat=nothing,
                camera_upvector=Vec3f(0,0,1), camera_fov=45f0, figure_kwargs...)
 
@@ -76,6 +77,13 @@ control for the given motion sequence. Requires `GLMakie` or `WGLMakie`.
 
 Camera kwargs: `camera_eye` and `camera_lookat` are `Vec3f` world-space positions;
 `camera_fov` is the vertical field-of-view in degrees (default 45°).
+
+Pivot visualization: when `seq.pivot_joints` is populated and `pivot_mode != :none`,
+joint markers are overlaid colored by probability using the `:hot` colormap.
+- `pivot_mode = :max`       — show only the joint with the highest score per frame.
+- `pivot_mode = :threshold` — show all joints with score ≥ `pivot_threshold`.
+`pivot_joint_indices` maps the columns of `seq.pivot_joints` to model joint indices
+(1-indexed; default `1:23` covers SMPLX body joints).
 """
 function viz_motion end
 
@@ -96,22 +104,26 @@ function viz_motions end
 """
     record_motion(model, seq::MotionSequence, outfile::String;
                   fps=nothing, resolution=(1280,720), show_skeleton=false,
+                  pivot_mode=:none, pivot_threshold=0.5f0, pivot_joint_indices=1:23,
                   camera_eye=nothing, camera_lookat=nothing,
                   camera_upvector=Vec3f(0,0,1), camera_fov=45f0)
 
 Render `seq` to a video file (`.mp4`, `.gif`, etc.) without a display. Uses
 `Makie.record` — works headlessly with `CairoMakie`. `fps` defaults to `seq.fps`.
+Pivot kwargs: see `viz_motion` for pivot visualization options.
 """
 function record_motion end
 
 """
     render_frame(model, seq::MotionSequence, frame::Int, outfile::String;
                  resolution=(1280,720), show_skeleton=false,
+                 pivot_mode=:none, pivot_threshold=0.5f0, pivot_joint_indices=1:23,
                  camera_eye=nothing, camera_lookat=nothing,
                  camera_upvector=Vec3f(0,0,1), camera_fov=45f0)
 
 Render a single frame from `seq` to an image file (`.png`, `.svg`, etc.) without a
 display. Works headlessly with `CairoMakie`.
+Pivot kwargs: see `viz_motion` for pivot visualization options.
 """
 function render_frame end
 

@@ -155,32 +155,39 @@ kinematics — pass the matching `BodyModel` / `SUPRModel` to `bake_motion`.
 
 The visualizer uses `up` to orient the scene correctly.
 
+`pivot_joints` is an optional `(N_frames, N_tracked)` matrix of per-joint pivot
+probability scores loaded via `load_pivot_labels`. Values near 1.0 indicate
+high pivot probability; negative values indicate low probability. Pass `nothing`
+(the default) when no pivot labels are available.
+
 Fields:
-  poses      (N_frames, pose_dim)  — flat axis-angle pose per frame
-  betas      (N_b,)                — shape parameters (constant across frames)
-  trans      (N_frames, 3)         — root translation per frame
-  fps        Float32               — capture/playback frame rate
-  model_type Symbol                — :smpl | :smplx | :supr
-  gender     Symbol                — :male | :female | :neutral
-  up         Symbol                — :y | :z  (which world axis is "up")
+  poses        (N_frames, pose_dim)   — flat axis-angle pose per frame
+  betas        (N_b,)                 — shape parameters (constant across frames)
+  trans        (N_frames, 3)          — root translation per frame
+  fps          Float32                — capture/playback frame rate
+  model_type   Symbol                 — :smpl | :smplx | :supr
+  gender       Symbol                 — :male | :female | :neutral
+  up           Symbol                 — :y | :z  (which world axis is "up")
+  pivot_joints (N_frames, N_tracked) or nothing — pivot probability scores
 """
 struct MotionSequence{T<:AbstractFloat}
-    poses      :: Matrix{T}   # (N_frames, pose_dim)  flat axis-angle
-    betas      :: Vector{T}   # (N_b,)
-    trans      :: Matrix{T}   # (N_frames, 3)
-    fps        :: Float32
-    model_type :: Symbol      # :smpl | :smplx | :supr
-    gender     :: Symbol      # :male | :female | :neutral
-    up         :: Symbol      # :y | :z
+    poses        :: Matrix{T}                   # (N_frames, pose_dim)  flat axis-angle
+    betas        :: Vector{T}                   # (N_b,)
+    trans        :: Matrix{T}                   # (N_frames, 3)
+    fps          :: Float32
+    model_type   :: Symbol                      # :smpl | :smplx | :supr
+    gender       :: Symbol                      # :male | :female | :neutral
+    up           :: Symbol                      # :y | :z
+    pivot_joints :: Union{Nothing, Matrix{T}}   # (N_frames, N_tracked) or nothing
 
     function MotionSequence{T}(poses, betas, trans, fps, model_type, gender,
-                               up=:y) where T<:AbstractFloat
-        new{T}(poses, betas, trans, fps, model_type, gender, up)
+                               up=:y, pivot_joints=nothing) where T<:AbstractFloat
+        new{T}(poses, betas, trans, fps, model_type, gender, up, pivot_joints)
     end
 end
 
 # Outer convenience constructor — infers T from poses
 function MotionSequence(poses::Matrix{T}, betas, trans, fps, model_type, gender,
-                        up=:y) where T<:AbstractFloat
-    MotionSequence{T}(poses, betas, trans, fps, model_type, gender, up)
+                        up=:y, pivot_joints=nothing) where T<:AbstractFloat
+    MotionSequence{T}(poses, betas, trans, fps, model_type, gender, up, pivot_joints)
 end

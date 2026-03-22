@@ -67,7 +67,29 @@ end
 # ---------------------------------------------------------------------------
 
 """
-    load_motion(path::String) -> MotionSequence{Float32}
+    load_pivot_labels(path::String) -> Matrix{Float32}
+
+Load per-frame pivot joint probability scores from a `.npy` file.
+
+Returns a `(N_frames, N_tracked)` Float32 matrix where `N_tracked` is the
+number of joints with scores (typically 23 for SMPLX body joints, corresponding
+to model joint indices 1–23 in Julia's 1-indexed convention).
+
+Values near 1.0 indicate high pivot probability; negative values indicate low
+probability.
+
+# Example
+```julia
+labels = load_pivot_labels("walk_stageii.npy")   # (N_frames, 23) Matrix{Float32}
+```
+"""
+function load_pivot_labels(path::String) :: Matrix{Float32}
+    return Float32.(NPZ.npzread(path))   # NPZ.npzread on .npy returns the array directly
+end
+
+
+"""
+    load_motion(path::String; pivot_labels_path=nothing, up=nothing) -> MotionSequence{Float32}
 
 Load a motion sequence from a `.smpl` (smplcodec) or AMASS `.npz` file.
 
@@ -87,13 +109,30 @@ else neutral) or string (AMASS); defaults to `:neutral`.
 
 `model_type` is inferred from `pose_dim` (72→:smpl, 165→:smplx, 228→:supr).
 
+`up`: which world axis is "up" in the output of `smpl_lbs` for this file.
+  Auto-detected when `nothing` (default):
+    - smplcodec v1 (`fullpose` key) → `:y`  (root rotation not encoding Y→Z flip)
+    - smplcodec v2 (`bodyPose` key) → `:z`  (root rotation encodes Y→Z flip)
+    - AMASS npz    (`poses` key)    → `:z`
+  Override with `up=:y` when loading from a Y-up smplcodec v2 dataset, e.g.
+  `AMASS_SMPLX_NEUTRAL_Yup_smplFormat` (the root pose encodes only facing direction,
+  not the Y→Z world reorientation).
+
+`pivot_labels_path`: optional path to a `.npy` file with pivot joint probability
+scores (see `load_pivot_labels`). When provided, `seq.pivot_joints` is populated.
+
 # Example
 ```julia
 seq = load_motion("motion.smpl")
 seq = load_motion("/path/to/AMASS/ACCAD/Female1General/walk.npz")
+seq = load_motion("walk.smpl"; pivot_labels_path="walk_stageii.npy")
+seq = load_motion("walk_yup.smpl"; up=:y)                    # Y-up smplcodec v2
 ```
 """
-function load_motion(path::String) :: MotionSequence{Float32}
+function load_motion(path::String;
+                     pivot_labels_path::Union{Nothing,String} = nothing,
+                     up::Union{Nothing,Symbol}                = nothing
+                     ) :: MotionSequence{Float32}
     d = NPZ.npzread(path)
 
     # ---- poses ----
@@ -163,13 +202,27 @@ function load_motion(path::String) :: MotionSequence{Float32}
     model_type = _infer_model_type(pose_dim)
 
     # ---- up axis ----
-    # All three supported formats (smplcodec v1/v2, AMASS npz) store motion in Z-up
-    # world coordinates: the global orientation (root joint pose) rotates the SMPL
-    # Y-up T-pose to the Z-up world, so the output vertices of smpl_lbs have Z as
-    # height. Makie's LScene camera is also Z-up by default, so no vertex rotation
-    # is needed — the :up field is stored so callers can override it when loading
-    # data from Y-up sources (e.g. MotionSequence(..., :y)).
-    up = :z
+    # smplcodec v1 (fullpose key): root rotation does NOT encode a Y→Z world flip,
+    #   so smpl_lbs output has Y as height → :y.
+    # smplcodec v2 (bodyPose key) and AMASS npz (poses key): root rotation encodes
+    #   the Y→Z flip → smpl_lbs output has Z as height → :z.
+    # The `up` keyword overrides auto-detection, e.g. for Yup smplcodec v2 datasets
+    #   (AMASS_SMPLX_NEUTRAL_Yup_smplFormat) where the root pose does not include the
+    #   Y→Z flip and Y is the height axis.
+    up_axis = if !isnothing(up)
+        up                      # explicit caller override
+    elseif haskey(d, "fullpose")
+        :y                      # smplcodec v1 — Y-up convention
+    else
+        :z                      # smplcodec v2 + AMASS — Z-up world coords
+    end
 
-    return MotionSequence{Float32}(poses, betas, trans, fps_val, model_type, gender, up)
+    pivot_joints = isnothing(pivot_labels_path) ? nothing :
+                   load_pivot_labels(pivot_labels_path)
+    if !isnothing(pivot_joints) && size(pivot_joints, 1) != size(poses, 1)
+        @warn "load_motion: pivot_labels frame count ($(size(pivot_joints,1))) " *
+              "≠ pose frame count ($(size(poses,1)))"
+    end
+    return MotionSequence{Float32}(poses, betas, trans, fps_val, model_type, gender,
+                                   up_axis, pivot_joints)
 end

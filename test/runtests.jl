@@ -91,4 +91,8 @@ end
 
     include("test_static_compile.jl")
 
+    if get(ENV, "SMPL_TEST_GPU", "false") == "true"
+        include("test_gpu.jl")
+    end
+
 end

@@ -117,9 +117,12 @@ function smpl_lbs(
     # (3)  R_k = rodrigues(θ_k)  — local rotation matrix per joint
     #      θ is a flat axis-angle vector; reshape to (3, N_j) for easy slicing.
     #      Each column θ_mat[:,k] is the axis-angle for joint k.
+    #      Array(θ) is a no-op on CPU; on GPU it brings θ to CPU so that
+    #      rodrigues can access elements without triggering slow scalar indexing.
     # ------------------------------------------------------------------
-    θ_mat    = reshape(θ, 3, N_j)               # (3, N_j) — view, no copy
-    rot_mats = zeros(ET, 3, 3, N_j)             # (3, 3, N_j) — local rotations
+    θ_cpu    = Array(θ)                          # (N_j*3,) on CPU
+    θ_mat    = reshape(θ_cpu, 3, N_j)            # (3, N_j) — view, no copy
+    rot_mats = zeros(ET, 3, 3, N_j)             # (3, 3, N_j) — local rotations, CPU
     @inbounds for k in axes(rot_mats, 3)
         rot_mats[:, :, k] .= rodrigues(@view θ_mat[:, k])
     end
@@ -140,16 +143,17 @@ function smpl_lbs(
     # ------------------------------------------------------------------
     # (5)  v_p = v_s + P·ψ       — pose blend shapes
     #      P (posedirs) maps the ((N_j-1)*9,) pose feature to a (N_v*3,) offset.
+    #      A2(ψ) moves ψ to the model's device (no-op on CPU); required so that
+    #      ψ * model.posedirs does not mix CPU and GPU arrays.
     # ------------------------------------------------------------------
-    v_posed = v_shaped .+ reshape(ψ * model.posedirs, N_v, 3)  # (N_v, 3)
+    v_posed = v_shaped .+ reshape(A2(ψ) * model.posedirs, N_v, 3)  # (N_v, 3)
 
     # ------------------------------------------------------------------
     # (6)  G_k = FK(R, J, pa)    — forward kinematics
     #      The kinematic chain is sequential: G_k = G_{pa(k)} * T_k^{local}.
-    #      Must run on CPU. Array() is a no-op for CPU models; for GPU models
-    #      it transfers only the O(N_j) arrays, not the O(N_v) vertex data.
+    #      rot_mats is already on CPU (populated by the rodrigues loop above).
     # ------------------------------------------------------------------
-    rot_cpu = Array(rot_mats)          # (3, 3, N_j) on CPU
+    rot_cpu = rot_mats                 # (3, 3, N_j) on CPU — already CPU
     J_cpu   = Array(J)'                # (3, N_j)    on CPU, transposed for FK
     G_posed, A = forward_kinematics(rot_cpu, J_cpu, model.parents)
 
@@ -165,14 +169,20 @@ function smpl_lbs(
     # ------------------------------------------------------------------
     # (8)  v_i = T_i · [v_p_i; 1]  — linear blend skinning
     #      Append row of ones for homogeneous coordinates (handles translation).
+    #      Use similar(model.v_template, 1, N_v) to allocate the ones row on the
+    #      same device as v_posed (GPU or CPU), avoiding a CPU/GPU vcat mismatch.
     #      _lbs_skin dispatches to the CPU loop or GPU broadcast automatically.
     # ------------------------------------------------------------------
-    v_posed_h = vcat(v_posed', ones(ET, 1, N_v))               # (4, N_v) homogeneous
-    v_h       = _lbs_skin(T_blend, v_posed_h)                  # (4, N_v) skinned
+    ones_row  = fill!(similar(model.v_template, 1, N_v), one(ET))  # (1, N_v) on device
+    v_posed_h = vcat(v_posed', ones_row)                            # (4, N_v) homogeneous
+    v_h       = _lbs_skin(T_blend, v_posed_h)                      # (4, N_v) skinned
 
-    # Extract 3D positions and apply global translation
-    verts  = (v_h[1:3, :] .+ trans)'             # (N_v, 3)
-    joints = (A2(G_posed[1:3, 4, :]) .+ trans)'  # (N_j, 3)
+    # Extract 3D positions and apply global translation.
+    # trans may arrive as a CPU array even for GPU models (user convenience).
+    # reshape trick: A2 is always 2D, so construct (3,1) then reshape to (3,).
+    trans_dev = reshape(A2(reshape(collect(ET, trans), 3, 1)), 3)   # (3,) on device
+    verts  = (v_h[1:3, :] .+ trans_dev)'             # (N_v, 3)
+    joints = (A2(G_posed[1:3, 4, :]) .+ trans_dev)'  # (N_j, 3)
 
     return SMPLOutput{ET, A2}(
         verts,
@@ -237,10 +247,13 @@ function smpl_lbs(
     #      SUPR uses 4D quaternion features for pose blend shapes.
     #      Both rot_mats (for FK) and quat_feats (for pose correction)
     #      are computed from the same axis-angle input θ.
+    #      Array(θ) is a no-op on CPU; on GPU it brings θ to CPU so that
+    #      rodrigues / quat_feat can access elements without slow scalar indexing.
     # ------------------------------------------------------------------
-    θ_mat      = reshape(θ, 3, N_j)           # (3, N_j) — view, no copy
-    rot_mats   = zeros(ET, 3, 3, N_j)         # (3, 3, N_j) — local rotations
-    quat_feats = zeros(ET, 4, N_j)            # (4, N_j)  — quaternion features
+    θ_cpu      = Array(θ)                      # (N_j*3,) on CPU
+    θ_mat      = reshape(θ_cpu, 3, N_j)        # (3, N_j) — view, no copy
+    rot_mats   = zeros(ET, 3, 3, N_j)         # (3, 3, N_j) — local rotations, CPU
+    quat_feats = zeros(ET, 4, N_j)            # (4, N_j)  — quaternion features, CPU
     @inbounds for k in axes(rot_mats, 3)
         rot_mats[:, :, k] .= rodrigues(@view θ_mat[:, k])
         quat_feats[:, k]   = quat_feat(@view θ_mat[:, k])
@@ -256,13 +269,16 @@ function smpl_lbs(
     # ------------------------------------------------------------------
     # (5)  v_p = v_s + P·ψ       — pose blend shapes
     #      posedirs is (N_j*4, N_v*3); result reshaped to (N_v, 3).
+    #      A2(ψ) moves ψ to the model's device (no-op on CPU); required so that
+    #      ψ * model.posedirs does not mix CPU and GPU arrays.
     # ------------------------------------------------------------------
-    v_posed = v_shaped .+ reshape(ψ * model.posedirs, N_v, 3)   # (N_v, 3)
+    v_posed = v_shaped .+ reshape(A2(ψ) * model.posedirs, N_v, 3)   # (N_v, 3)
 
     # ------------------------------------------------------------------
     # (6)  FK — same sequential chain as SMPL, runs on CPU
+    #      rot_mats is already on CPU (populated by the rodrigues loop above).
     # ------------------------------------------------------------------
-    rot_cpu = Array(rot_mats)
+    rot_cpu = rot_mats                         # (3, 3, N_j) on CPU — already CPU
     J_cpu   = Array(J)'                        # (3, N_j) for FK convention
     G_posed, A = forward_kinematics(rot_cpu, J_cpu, model.parents)
 
@@ -275,11 +291,13 @@ function smpl_lbs(
     # ------------------------------------------------------------------
     # (8)  v_i = T_i · [v_p_i; 1] — LBS skinning (same as SMPL)
     # ------------------------------------------------------------------
-    v_posed_h = vcat(v_posed', ones(ET, 1, N_v))                 # (4, N_v)
-    v_h       = _lbs_skin(T_blend, v_posed_h)                    # (4, N_v)
+    ones_row  = fill!(similar(model.v_template, 1, N_v), one(ET))  # (1, N_v) on device
+    v_posed_h = vcat(v_posed', ones_row)                            # (4, N_v)
+    v_h       = _lbs_skin(T_blend, v_posed_h)                      # (4, N_v)
 
-    verts  = (v_h[1:3, :] .+ trans)'                             # (N_v, 3)
-    joints = (A2(G_posed[1:3, 4, :]) .+ trans)'                  # (N_j, 3)
+    trans_dev = reshape(A2(reshape(collect(ET, trans), 3, 1)), 3)   # (3,) on device
+    verts  = (v_h[1:3, :] .+ trans_dev)'                            # (N_v, 3)
+    joints = (A2(G_posed[1:3, 4, :]) .+ trans_dev)'                 # (N_j, 3)
 
     return SMPLOutput{ET, A2}(
         verts,
