@@ -9,7 +9,7 @@ Binary format (all little-endian):
     [v_template, shapedirs, posedirs, J_regressor, parents, lbs_weights, faces]
     - ndims::UInt8         (number of dimensions)
     - shape::UInt64 × ndims  (each dimension size)
-    - dtype::UInt8         (1=Float32, 2=UInt32)
+    - dtype::UInt8         (1=Float32, 2=UInt32, 3=Int32)
     - data::dtype × prod(shape)  (raw row-major data)
 """
 
@@ -21,6 +21,15 @@ function write_array(io::IO, arr::Array{Float32})
         write(io, UInt64(d))
     end
     write(io, UInt8(1))  # Float32
+    write(io, arr)
+end
+
+function write_array(io::IO, arr::Array{Int32})
+    write(io, UInt8(ndims(arr)))
+    for d in size(arr)
+        write(io, UInt64(d))
+    end
+    write(io, UInt8(3))  # Int32
     write(io, arr)
 end
 
@@ -41,7 +50,9 @@ function convert_npz_to_bin(npz_path::String, out_path::String)
     shapedirs   = Float32.(reshape(model["shapedirs"], 6890*3, :))  # (6890*3, 300)
     posedirs    = Float32.(reshape(model["posedirs"], 6890*3, :)')  # (207, 6890*3)  transposed
     J_regressor = Float32.(model["J_regressor"])         # (24, 6890)
-    parents     = UInt32.(model["kintree_table"][1, :])  # (24,)
+    raw_parents = Int64.(model["kintree_table"][1, :])   # (24,) — may contain 0xffffffff sentinel
+    raw_parents[1] = 0                                   # root sentinel 0xffffffff → 0
+    parents     = Int32.(raw_parents .+ 1)               # 0-indexed → 1-indexed; root=1
     lbs_weights = Float32.(model["weights"])             # (6890, 24)
     faces       = UInt32.(model["f"] .+ 1)               # (faces, 3) — python→julia indexing
 
@@ -71,13 +82,15 @@ function convert_npz_to_bin(npz_path::String, out_path::String)
     println("Written: $out_path  ($(round(sz/1024/1024, digits=2)) MB)")
 end
 
-# ---- Main ----
-default_in  = joinpath(homedir(), ".julia", "scratchspaces",
-                       "124859b0-ceae-595e-8997-d05f6a7a8dfe",
-                       "datadeps", "SMPL_models", "SMPL_MALE.npz")
-default_out = joinpath(dirname(@__DIR__), "SMPL_MALE.smplbin")
+# ---- Main (only runs when executed directly, not when included) ----
+if abspath(PROGRAM_FILE) == @__FILE__
+    default_in  = joinpath(homedir(), ".julia", "scratchspaces",
+                           "124859b0-ceae-595e-8997-d05f6a7a8dfe",
+                           "datadeps", "SMPL_models", "SMPL_MALE.npz")
+    default_out = joinpath(dirname(@__DIR__), "SMPL_MALE.smplbin")
 
-npz_path = length(ARGS) >= 1 ? ARGS[1] : default_in
-out_path = length(ARGS) >= 2 ? ARGS[2] : default_out
+    npz_path = length(ARGS) >= 1 ? ARGS[1] : default_in
+    out_path = length(ARGS) >= 2 ? ARGS[2] : default_out
 
-convert_npz_to_bin(npz_path, out_path)
+    convert_npz_to_bin(npz_path, out_path)
+end

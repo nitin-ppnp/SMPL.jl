@@ -38,15 +38,28 @@ Arrays stored in order: `v_template`, `shapedirs`, `posedirs`, `J_regressor`, `p
 julia compile.jl
 ```
 
-This produces `build/smpl.exe` (or `build/smpl` on Linux/macOS). The build uses JuliaC's `unsafe` trim mode, which strips the GC and IO dispatch table — the resulting binary has no Julia runtime dependency.
+This produces `build/bin/smpl.exe` (or `build/bin/smpl` on Linux/macOS), with bundled runtime libraries under `build/`. The build uses JuliaC's `unsafe` trim mode, which strips the GC and IO dispatch table — the resulting binary has no Julia installation required at runtime.
 
 ## Step 3 — Run
 
+The executable has two modes:
+
+**Interactive mode** (1 arg) — runs a zero-pose forward pass and prints statistics to stdout:
+
 ```bash
-./build/smpl SMPL_MALE.smplbin
+./build/bin/smpl SMPL_MALE.smplbin
 ```
 
-The executable runs `smpl_lbs` on a default zero pose and prints vertex and joint positions to stdout.
+**Binary I/O mode** (6 args) — reads inputs from binary files, writes outputs to binary files:
+
+```bash
+./build/bin/smpl SMPL_MALE.smplbin betas.bin poses.bin trans.bin verts_out.bin joints_out.bin
+```
+
+Input binary format: `UInt64` length-prefix + raw `Float32` bytes.
+Output binary format: `UInt64` rows + `UInt64` cols + raw `Float32` bytes (column-major).
+
+This binary I/O mode is used by `test/test_static_compile.jl` to verify outputs against the Python reference.
 
 ## Technical Notes
 
@@ -60,13 +73,38 @@ fp  = ccall(:fopen, Ptr{Cvoid}, (Cstring, Cstring), path, "rb")
 ccall(:fclose, Cint, (Ptr{Cvoid},), fp)
 ```
 
+### LBS Pipeline in the Executable
+
+The static executable uses a dedicated `static_smpl_lbs` function in `staticSMPL.jl` that is fully GC-free: no `zeros`, `ones`, `vcat`, `copy`, or BLAS calls. All intermediate matrices are `MallocMatrix{Float32}` (malloc-backed, no GC), and the forward kinematics loop uses manual stack-allocated `SMatrix{4,4,Float32}` operations from StaticArrays.jl.
+
+`BodyModel{Float32, MallocMatrix{Float32}}` is loaded by `static/static_io.jl` via `ccall(:fread,...)` into malloc-backed arrays. The same struct layout is used as the normal CPU path (`BodyModel{Float32, Matrix{Float32}}`), so the type is identical — only the array backend differs.
+
 ### Array Types
 
-The static path instantiates `BodyModel{Float32, MallocMatrix{Float32}}` — `MallocMatrix` from StaticTools.jl allocates via `malloc` instead of the GC, making it available in trimmer mode. The same `smpl_lbs` function is reused because it only requires `AbstractMatrix{T}`.
+The static path instantiates `BodyModel{Float32, MallocMatrix{Float32}}` — `MallocMatrix` from StaticTools.jl allocates via `malloc` instead of the GC, making it available in trimmer mode.
+
+## Testing
+
+Two test files cover the static path:
+
+**`test/test_static_io.jl`** — runs without JuliaC. Calls the real `convert_npz_to_bin` converter, loads the result with `create_smpl`, verifies array shapes and values, then runs the forward pass (materialising `MallocMatrix → Matrix` first) against the Python reference outputs at 1e-5 tolerance. Enable with:
+
+```bash
+# Runs automatically as part of the full test suite:
+julia --project=. -e 'using Pkg; Pkg.test()'
+
+# Or disable with:
+SMPL_TEST_STATIC=false julia --project=. -e 'using Pkg; Pkg.test()'
+```
+
+**`test/test_static_compile.jl`** — full end-to-end pipeline: convert → compile with JuliaC → run binary with binary I/O → compare outputs vs Python reference (1e-4 tolerance). Disabled by default due to ~10 min compile time:
+
+```bash
+SMPL_TEST_COMPILE=true julia --project=. test/test_static_compile.jl
+```
 
 ### Extension Safety
 
 `Adapt.jl` and `Makie.jl` must **not** appear in `static_project/Project.toml`. If they did, the corresponding extensions (`AdaptExt`, `MakieExt`) would load and attempt to `using Adapt` / `using Makie`, which triggers dynamic dispatch that the trimmer cannot handle.
 
 `StaticArrays.jl` is safe — it is allocation-free and all `@inline` functions compile away completely.
-```

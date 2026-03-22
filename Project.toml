@@ -13,6 +13,7 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NPZ = "15e1cf62-19b3-5cfa-8e77-841668bca605"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+StaticTools = "86c06d3c-3f03-46de-9781-57580aa96d0a"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
 [weakdeps]
@@ -28,6 +29,7 @@ CairoMakie = "0.15.9"
 FilePathsBase = "0.9.24"
 GLMakie = "0.13.9"
 StaticArrays = "1"
+StaticTools = "0.8.12"
 julia = "1.9"
 
 [extras]
@@ -39,8 +41,9 @@ GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 Observables = "510215fc-4207-5dde-b226-833fc4488ee2"
 PProf = "e4faabce-9ead-11e9-39d9-4379958e3056"
+StaticTools = "86c06d3c-3f03-46de-9781-57580aa96d0a"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 WGLMakie = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 
 [targets]
-test = ["Test"]
+test = ["Test", "StaticTools"]

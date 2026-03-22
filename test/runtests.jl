@@ -69,14 +69,26 @@ function test_supr()
     return verts_ok && joints_ok
 end
 
-@testset "SMPL" begin
-    @test test_smpl()
-end
+# Wrap everything in one outer testset so a failure in one group
+# (e.g. SUPR model not downloaded) does not abort the remaining tests.
+@testset "SMPL.jl" begin
 
-@testset "SMPLX" begin
-    @test test_smplx()
-end
+    @testset "SMPL" begin
+        @test test_smpl()
+    end
 
-@testset "SUPR" begin
-    @test test_supr()
+    @testset "SMPLX" begin
+        @test test_smplx()
+    end
+
+    @testset "SUPR" begin
+        @test test_supr()
+    end
+
+    if get(ENV, "SMPL_TEST_STATIC", "true") != "false"
+        include("test_static_io.jl")
+    end
+
+    include("test_static_compile.jl")
+
 end

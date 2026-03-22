@@ -19,6 +19,21 @@ ext/
 static/
   static_io.jl   # JuliaC trimmer-safe loader — ccall(:fread,...), MallocMatrix
 
+staticSMPL.jl    # @main entrypoint for compiled executable — GC-free static_smpl_lbs
+compile.jl       # JuliaC build script — outputs build/bin/smpl[.exe] via bundle_products
+
+scripts/
+  convert_model.jl  # NPZ → .smplbin one-time converter; guarded with abspath(__FILE__) check
+
+static_project/
+  Project.toml   # Minimal deps for trimmer: LinearAlgebra, StaticArrays, StaticTools
+  Manifest.toml  # Pinned manifest (regenerate with: julia --project=static_project -e 'using Pkg; Pkg.resolve()')
+
+test/
+  runtests.jl           # Outer @testset "SMPL.jl" wrapper; includes static tests
+  test_static_io.jl     # Binary roundtrip test — no JuliaC needed; gated by SMPL_TEST_STATIC
+  test_static_compile.jl # Full compile→run→verify test; gated by SMPL_TEST_COMPILE=true
+
 docs/
   make.jl        # Documenter.jl build script
   Project.toml   # Documenter dep
@@ -91,6 +106,14 @@ Internal helpers (not exported):
 Camera kwargs on all 4 public functions: `camera_eye::Union{Nothing,Vec3f}`, `camera_lookat::Union{Nothing,Vec3f}`, `camera_upvector::Vec3f`, `camera_fov::Float32`. Flat kwargs (not a struct) enable idiomatic splatting: `cam = (;camera_eye=..., camera_fov=35f0); viz_motion(model, seq; cam...)`.
 
 **Makie limit-expansion pitfall**: every `poly!`, `lines!`, `mesh!`, `arrows3d!` call triggers `update_limits!(scene)`, which auto-frames the camera to encompass all geometry. Any geometry added outside the trajectory rect (e.g., grid lines with extra padding, markers at world origin) zooms the camera far out. Keep all scene geometry within `rect`.
+
+## Static Compilation (`staticSMPL.jl` + `compile.jl`)
+
+- `staticSMPL.jl` contains `static_smpl_lbs` — a fully GC-free reimplementation of the LBS pipeline using `MallocMatrix{Float32}` for all intermediates and `SMatrix{4,4}` for per-joint transforms. **Do not reuse `smpl_lbs` from `src/model.jl`** — it calls `zeros`, `ones`, `vcat`, `copy`, and BLAS, all of which are unavailable in `trim_mode="unsafe"`.
+- `compile.jl` calls `bundle_products` which places the binary at **`build/bin/smpl[.exe]`** (not `build/smpl[.exe]`).
+- `scripts/convert_model.jl` must write `parents` as **`Int32`** (dtype tag `3`) with the root sentinel zeroed before the `+1` 0→1-index offset. Writing `UInt32` causes silent bit-reinterpretation in `_fread_i32_vec`.
+- `static_project/Manifest.toml` must be kept in sync with `Project.toml`. After adding a dep, run `julia --project=static_project -e 'using Pkg; Pkg.resolve()'`.
+- Two test tiers: `test_static_io.jl` (no compiler, ~seconds) and `test_static_compile.jl` (`SMPL_TEST_COMPILE=true`, ~10 min).
 
 ## Key Conventions
 

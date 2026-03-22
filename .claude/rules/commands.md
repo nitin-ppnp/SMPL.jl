@@ -16,8 +16,11 @@
 # Convert NPZ model to static binary format
 julia scripts/convert_model.jl input.npz output.smplbin
 
-# Build standalone static executable (outputs build/smpl.exe or build/smpl on Linux/macOS)
+# Build standalone static executable (outputs build/bin/smpl.exe or build/bin/smpl on Linux/macOS)
 julia compile.jl
+
+# Regenerate static_project manifest after adding/changing deps
+julia --project=static_project -e 'using Pkg; Pkg.resolve()'
 ```
 
 ## Docs
@@ -38,3 +41,17 @@ Tests live in `test/runtests.jl`. They compare `out.vertices` and `out.joints`
 - SMPL and SMPLX tests run against bundled reference outputs — no download needed.
 - The SUPR test requires SUPR model files to be downloaded (prompts for credentials on first run,
   or reads from `credentials.toml`).
+
+```bash
+# Run full test suite
+julia --project=. -e 'using Pkg; Pkg.test()'
+
+# Skip the static IO test (e.g. if SMPL models not downloaded)
+SMPL_TEST_STATIC=false julia --project=. -e 'using Pkg; Pkg.test()'
+
+# Run the static binary roundtrip test standalone (no JuliaC required, ~seconds)
+julia --project=. test/test_static_io.jl
+
+# Run the full compile→run→verify test (requires JuliaC, ~10 min)
+SMPL_TEST_COMPILE=true julia --project=. test/test_static_compile.jl
+```
