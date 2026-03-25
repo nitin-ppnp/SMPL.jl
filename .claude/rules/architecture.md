@@ -29,6 +29,16 @@ static_project/
   Project.toml   # Minimal deps for trimmer: LinearAlgebra, StaticArrays, StaticTools
   Manifest.toml  # Pinned manifest (regenerate with: julia --project=static_project -e 'using Pkg; Pkg.resolve()')
 
+bench/
+  Project.toml        # Isolated dev env — SMPL (path dep), CUDA, Adapt, StaticArrays, StaticTools
+  BenchmarkSuite.jl   # Module: benchmark_pipeline, benchmark_pipeline_gpu,
+                      #         benchmark_components (per-step), benchmark_static,
+                      #         benchmark_static_julia (GC-free pipeline, no exe required)
+                      # Includes static/static_io.jl + copies _static_fk!/_static_smpl_lbs
+                      # from staticSMPL.jl to avoid re-including src/types.jl
+  run_benchmarks.jl   # Standalone runner — reads SMPL_BENCH_* env vars, prints report
+                      # Usage: julia --project=bench/ bench/run_benchmarks.jl
+
 test/
   runtests.jl           # Outer @testset "SMPL.jl" wrapper; includes static tests
   test_static_io.jl     # Binary roundtrip test — no JuliaC needed; gated by SMPL_TEST_STATIC
@@ -111,6 +121,17 @@ Internal helpers (not exported):
 - `_ground_plane!(scene, rect)` — white floor quad at rect bounds + gray grid lines; stays within rect to avoid Makie auto-limit expansion
 - `_origin_marker!(scene, rect)` — RGB XYZ arrows at world `(0,0,0)`, but **only drawn when `(0,0,0)` falls within `rect`**. Skips drawing when body is far from world origin to prevent Makie auto-limit expansion zooming the camera out
 - `_setup_camera!(lscene, rect; camera_eye, camera_lookat, camera_upvector, camera_fov)` — positions `Camera3D` explicitly; **must be called after all geometry** (`poly!`, `lines!`, `mesh!`, `arrows3d!`) so Makie's `update_limits!` cannot override it afterward
+- `_parse_speed(s)` — parses a speed string like `"6.8x"` or `"2"` to `Float64`; defaults to 1.0 on error
+- `_make_player_controls(fig, N_frames, n_scenes, rect)` → `(fig, scenes, frame_obs, play_status, slider, ctrl)` — creates LScene row + control row; `ctrl` is the nested `GridLayout` that `viz_motion` extends with Snap/Export/Capture buttons (columns 4–6)
+
+**Interactive player controls** (added by `viz_motion` to `ctrl`):
+- Speed `Menu` with presets + `"Custom..."` → opens a mini `Figure` dialog for arbitrary speed input; speed stored in `Ref{Float64}`
+- Play/pause loop uses `speed_ref` and resets to frame 1 at end (looping)
+- **Snap** (col 4) — camera state captured before blocking `save_file()` dialog (focus events may reset limits) and restored before `Makie.save(...; update=false)`. `update=false` prevents `Makie.save` from calling `reset_limits!` internally (Makie.jl#3647)
+- **Export** (col 5) — calls `record_motion` headlessly in `@async`; captures current `eyeposition`/`lookat`/`upvector`/`fov` from interactive camera and passes them to `record_motion`; interactive window unaffected
+- **Capture** (col 6) — creates a fresh offscreen `enc_scene` for `VideoStream` (avoids touching `fig`'s GL screen); captures frames via `Makie.colorbuffer(int_screen, Makie.GLNative)` written directly to `vs.io`; Stop shows save dialog then finalizes via `Makie.save(path, vs)`
+
+`record_motion` and `render_frame` are headless (CairoMakie-safe): they create their own figures and never call `NativeFileDialog`. `using NativeFileDialog` at module load is safe headlessly (lazy GTK init).
 
 Camera kwargs on all 4 public functions: `camera_eye::Union{Nothing,Vec3f}`, `camera_lookat::Union{Nothing,Vec3f}`, `camera_upvector::Vec3f`, `camera_fov::Float32`. Flat kwargs (not a struct) enable idiomatic splatting: `cam = (;camera_eye=..., camera_fov=35f0); viz_motion(model, seq; cam...)`.
 

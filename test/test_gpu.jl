@@ -121,41 +121,68 @@ if cuda_available
                 CuArray(trans),
             )
 
-            @test out_gpu.vertices isa CuMatrix{Float32}
-            @test out_gpu.joints   isa CuMatrix{Float32}
+            # Output arrays on GPU
+            @test out_gpu.vertices    isa CuMatrix{Float32}
+            @test out_gpu.joints      isa CuMatrix{Float32}
+            @test out_gpu.v_shaped    isa CuMatrix{Float32}
+            @test out_gpu.v_posed     isa CuMatrix{Float32}
+            # FK result and faces always on CPU
+            @test out_gpu.J_transforms isa Array{Float32, 3}
+            @test out_gpu.faces        === model_cpu.faces
+            # Numerical agreement with CPU
             @test maximum(abs.(Array(out_gpu.vertices) .- out_cpu.vertices)) < GPU_ATOL
             @test maximum(abs.(Array(out_gpu.joints)   .- out_cpu.joints))   < GPU_ATOL
         end
 
         # --------------------------------------------------------------
         # Test 4: GPU SUPR forward pass matches CPU (model download required)
+        # Skipped automatically when the SUPR model is not downloaded or is
+        # invalid (e.g. credentials expired and the file contains an HTML error
+        # page instead of a real NPZ).
         # --------------------------------------------------------------
         @testset "SUPR LBS on GPU" begin
-            datapath = joinpath(@__DIR__, "suprtest.npz")
-            data     = npzread(datapath)
+            supr_available = false
+            model_cpu = nothing
+            try
+                model_cpu      = create_supr_neutral()
+                supr_available = true
+            catch e
+                @info "Skipping SUPR GPU test: could not load SUPR model ($e)"
+            end
 
-            model_cpu = create_supr_neutral()
-            model_gpu = Adapt.adapt(CuArray, model_cpu)
+            if supr_available
+                model_gpu = Adapt.adapt(CuArray, model_cpu)
 
-            betas = data["betas"]
-            poses = data["poses"]
-            trans = data["trans"]
+                datapath = joinpath(@__DIR__, "suprtest.npz")
+                data     = npzread(datapath)
 
-            # SUPRModel: verify J_bias also moved to GPU
-            @test model_gpu.J_bias isa CuMatrix{Float32}
+                betas = data["betas"]
+                poses = data["poses"]
+                trans = data["trans"]
 
-            out_cpu = smpl_lbs(model_cpu, betas, poses, trans)
-            out_gpu = smpl_lbs(
-                model_gpu,
-                CuArray(betas),
-                CuArray(poses),
-                CuArray(trans),
-            )
+                # SUPRModel: verify J_bias also moved to GPU
+                @test model_gpu.J_bias isa CuMatrix{Float32}
 
-            @test out_gpu.vertices isa CuMatrix{Float32}
-            @test out_gpu.joints   isa CuMatrix{Float32}
-            @test maximum(abs.(Array(out_gpu.vertices) .- out_cpu.vertices)) < GPU_ATOL
-            @test maximum(abs.(Array(out_gpu.joints)   .- out_cpu.joints))   < GPU_ATOL
+                out_cpu = smpl_lbs(model_cpu, betas, poses, trans)
+                out_gpu = smpl_lbs(
+                    model_gpu,
+                    CuArray(betas),
+                    CuArray(poses),
+                    CuArray(trans),
+                )
+
+                # Output arrays on GPU
+                @test out_gpu.vertices    isa CuMatrix{Float32}
+                @test out_gpu.joints      isa CuMatrix{Float32}
+                @test out_gpu.v_shaped    isa CuMatrix{Float32}
+                @test out_gpu.v_posed     isa CuMatrix{Float32}
+                # FK result and faces always on CPU
+                @test out_gpu.J_transforms isa Array{Float32, 3}
+                @test out_gpu.faces        === model_cpu.faces
+                # Numerical agreement with CPU
+                @test maximum(abs.(Array(out_gpu.vertices) .- out_cpu.vertices)) < GPU_ATOL
+                @test maximum(abs.(Array(out_gpu.joints)   .- out_cpu.joints))   < GPU_ATOL
+            end
         end
 
     end  # @testset "GPU (CUDA)"

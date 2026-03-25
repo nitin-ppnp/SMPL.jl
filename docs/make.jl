@@ -15,6 +15,7 @@ makedocs(
         "Visualization"      => "visualization.md",
         "GPU Support"        => "gpu.md",
         "Static Compilation" => "static.md",
+        "Benchmarking"       => "benchmarking.md",
         "API Reference"      => "api.md",
     ],
     checkdocs = :exports,

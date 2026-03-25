@@ -1,0 +1,9 @@
+[deps]
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+SMPL = "582f87bb-3f4e-434f-ae83-4e6429f489ab"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+StaticTools = "86c06d3c-3f03-46de-9781-57580aa96d0a"
+
+[sources]
+SMPL = {path = ".."}

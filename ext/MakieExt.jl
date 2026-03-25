@@ -13,12 +13,13 @@
 #   render_frame(model, seq, frame, file; kwargs) -> nothing (headless PNG)
 #
 # Interactive player layout (viz_motion):
-#   ┌─────────────────────────────────┐
-#   │         LScene (3D view)         │
-#   ├────────┬────────────────┬────────┤
-#   │ [Play] │ ════════●═════ │  1.0x  │
-#   │        │  frame slider  │ speed  │
-#   └────────┴────────────────┴────────┘
+#   ┌──────────────────────────────────────────────────────────┐
+#   │                    LScene (3D view)                       │
+#   ├────────┬──────────────────┬───────┬──────┬──────┬────────┤
+#   │ [Play] │ ════════●═══════ │ speed │[Snap]│[Exp] │[Capt.] │
+#   │        │   frame slider   │ menu  │      │      │        │
+#   └────────┴──────────────────┴───────┴──────┴──────┴────────┘
+#   col 4 (between speed menu and Snap): hidden Textbox for custom speed input
 #
 # viz_motions(layout=:sidebyside): one LScene per motion, shared slider + play/pause
 # viz_motions(layout=:overlay):    single LScene, each motion a distinct mesh color
@@ -27,7 +28,17 @@ module MakieExt
 
 using SMPL
 using Makie
+using NativeFileDialog
 using LinearAlgebra: I
+
+
+# Parse a speed string like "2x", "6.8x", "2", "6.8" → Float64 (defaults to 1.0 on error).
+function _parse_speed(s::String) :: Float64
+    s2 = strip(lowercase(strip(s)))
+    s2 = endswith(s2, 'x') ? s2[1:end-1] : s2
+    v  = tryparse(Float64, s2)
+    return (isnothing(v) || v <= 0.0) ? 1.0 : v
+end
 
 
 # ---------------------------------------------------------------------------
@@ -288,45 +299,75 @@ end
 # _make_player_controls — shared UI widgets for interactive players
 # ---------------------------------------------------------------------------
 
-# Returns (fig, scenes, frame_obs, play_status, slider) ready for callers to
+# Returns (fig, scenes, frame_obs, play_status, slider, ctrl) ready for callers to
 # wire mesh/skeleton observables against `frame_obs`.
 # `rect` is used to initialise the scene camera bounds.
+# `ctrl` is the nested GridLayout for row 2; callers (viz_motion) may add
+# extra widgets to columns 4+ for record/snapshot functionality.
 function _make_player_controls(fig, N_frames::Int, n_scenes::Int, rect::Rect3f)
-    # Scene row
+    # Row 1: 3D scenes — each in its own column
     scenes = [LScene(fig[1, k]; show_axis = false, scenekw = (; limits = rect))
               for k in 1:n_scenes]
 
-    # Control row
-    play_status = Observable("▶ Play")
-    btn         = Button(fig[2, 1]; label = play_status, width = 80)
-    slider      = Slider(fig[2, 2:max(2, n_scenes)];
-                         range = 1:N_frames, startvalue = 1)
-    speed_menu  = Menu(fig[2, max(2, n_scenes)+1];
-                       options = ["0.25×", "0.5×", "1×", "2×", "4×"],
-                       default = "1×", width = 70)
+    # Row 2: controls in a nested GridLayout spanning all scene columns.
+    # This keeps the figure to exactly 2 rows × n_scenes columns, so the
+    # scenes fill the full figure width instead of being squeezed into the
+    # button-width first column.
+    ctrl        = GridLayout(fig[2, 1:n_scenes])
+    play_status = Observable("> Play")
+    btn         = Button(ctrl[1, 1]; label = play_status, width = 80)
+    slider      = Slider(ctrl[1, 2]; range = 1:N_frames, startvalue = 1)
+    speed_menu  = Menu(ctrl[1, 3];
+                       options = ["0.25x", "0.5x", "1x", "2x", "4x", "Custom..."],
+                       default = "1x", width = 80)
+    # Overlapping textbox in the same cell — toggled via .blockscene.visible[].
+    # Makie Blocks don't expose a .visible field; visibility is on the underlying Scene.
+    # Both occupy ctrl[1,3] (same space); only one is rendered at a time.
+    custom_speed_tb = Textbox(ctrl[1, 3]; placeholder = "speed...", width = 80)
+    custom_speed_tb.blockscene.visible[] = false
+    colsize!(ctrl, 1, Fixed(80))
+    colsize!(ctrl, 3, Fixed(80))
 
-    speed_map = Dict("0.25×" => 4.0, "0.5×" => 2.0, "1×" => 1.0,
-                     "2×" => 0.5,   "4×" => 0.25)
+    # Mutable speed — updated by menu selection or custom textbox
+    speed_ref = Ref(1.0)
 
-    # Play/pause logic — advances slider asynchronously
-    on(btn.clicks) do _
-        if play_status[] == "▶ Play"
-            play_status[] = "⏸ Pause"
-            @async while play_status[] == "⏸ Pause" &&
-                          slider.value[] < N_frames
-                set_close_to!(slider, slider.value[] + 1)
-                sleep(speed_map[speed_menu.selection[]] / 30.0)
-            end
-            # Auto-stop at last frame
-            if slider.value[] >= N_frames
-                play_status[] = "▶ Play"
-            end
+    on(speed_menu.selection) do sel
+        if sel != "Custom..."
+            speed_ref[] = _parse_speed(sel)
         else
-            play_status[] = "▶ Play"
+            speed_menu.blockscene.visible[] = false
+            custom_speed_tb.blockscene.visible[] = true
         end
     end
 
-    return (fig, scenes, slider.value, play_status, slider)
+    on(custom_speed_tb.stored_string) do s   # fires when Enter is pressed
+        v = _parse_speed(s)
+        speed_ref[] = v > 0 ? v : speed_ref[]
+        custom_speed_tb.blockscene.visible[] = false
+        speed_menu.blockscene.visible[] = true
+    end
+
+    # Play/pause logic — advances slider asynchronously; loops at end of sequence
+    on(btn.clicks) do _
+        if play_status[] == "> Play"
+            play_status[] = "|| Pause"
+            @async while play_status[] == "|| Pause"
+                if slider.value[] >= N_frames
+                    set_close_to!(slider, 1)   # loop back to start
+                else
+                    set_close_to!(slider, slider.value[] + 1)
+                end
+                sleep(1.0 / (speed_ref[] * 30.0))
+            end
+        else
+            play_status[] = "> Play"
+        end
+    end
+
+    rowsize!(fig.layout, 1, Relative(0.85))
+    rowsize!(fig.layout, 2, Fixed(40))
+
+    return (fig, scenes, slider.value, play_status, slider, ctrl)
 end
 
 
@@ -390,7 +431,8 @@ function SMPL.viz_motion(model, seq::SMPL.MotionSequence;
     faces = out0.faces   # (N_f, 3) UInt32 1-indexed
 
     fig = Figure(; figure_kwargs...)
-    _, scenes, frame_obs, _, _ = _make_player_controls(fig, N_frames, 1, rect)
+    _, scenes, frame_obs, _, _, ctrl =
+        _make_player_controls(fig, N_frames, 1, rect)
     scene = scenes[1]
     _ground_plane!(scene.scene, rect)
     _origin_marker!(scene.scene, rect)
@@ -414,6 +456,161 @@ function SMPL.viz_motion(model, seq::SMPL.MotionSequence;
     _setup_camera!(scene, rect;
                    camera_eye=camera_eye, camera_lookat=camera_lookat,
                    camera_upvector=camera_upvector, camera_fov=camera_fov)
+
+    # --- Snap / Export / Capture buttons (columns 4–6 of the ctrl row) ---
+    snap_btn    = Button(ctrl[1, 4]; label = "Snap",    width = 65)
+    export_btn  = Button(ctrl[1, 5]; label = "Export",  width = 65)
+    capture_btn = Button(ctrl[1, 6]; label = "Capture", width = 80)
+    colsize!(ctrl, 4, Fixed(65))
+    colsize!(ctrl, 5, Fixed(65))
+    colsize!(ctrl, 6, Fixed(80))
+
+    # Snap: capture current figure then open native save dialog.
+    # Camera state is saved before the blocking dialog (which may reset limits via
+    # focus events) and restored before save. update=false prevents Makie.save from
+    # calling reset_limits! internally (see Makie.jl#3647).
+    on(snap_btn.clicks) do _
+        cam    = Makie.cameracontrols(scene.scene)
+        eye    = Vec3f(cam.eyeposition[])
+        lookat = Vec3f(cam.lookat[])
+        upvec  = Vec3f(cam.upvector[])
+        fov    = Float32(cam.fov[])
+
+        path = save_file(homedir(); filterlist = "png")
+        if isempty(path)
+            # Dialog cancelled — restore camera (focus event may have reset it)
+            Makie.update_cam!(scene.scene, eye, lookat, upvec)
+            cam.fov[] = fov
+            return
+        end
+        endswith(path, ".png") || (path = path * ".png")
+        # Restore camera after blocking dialog, then save without triggering reset_limits!
+        Makie.update_cam!(scene.scene, eye, lookat, upvec)
+        cam.fov[] = fov
+        Makie.save(path, fig; update = false)
+    end
+
+    # Export: ask where to save first, then render headlessly via record_motion.
+    # Captures the current interactive camera angle at the moment of the click.
+    # Camera state is restored after rendering completes.
+    is_exporting = Ref(false)
+
+    on(export_btn.clicks) do _
+        is_exporting[] && return   # ignore double-click while exporting
+        is_exporting[] = true
+        export_btn.label[] = "Exporting..."
+
+        cam         = Makie.cameracontrols(scene.scene)
+        curr_eye    = hasproperty(cam, :eyeposition) ? Vec3f(cam.eyeposition[]) : camera_eye
+        curr_lookat = hasproperty(cam, :lookat)      ? Vec3f(cam.lookat[])      : camera_lookat
+        curr_up     = hasproperty(cam, :upvector)    ? Vec3f(cam.upvector[])    : camera_upvector
+        curr_fov    = hasproperty(cam, :fov)         ? Float32(cam.fov[])       : camera_fov
+
+        # Show save dialog FIRST — user picks the destination before waiting for render
+        path = save_file(homedir(); filterlist = "mp4,mkv,gif")
+        if isempty(path)
+            is_exporting[] = false
+            export_btn.label[] = "Export"
+            Makie.update_cam!(scene.scene, curr_eye, curr_lookat, curr_up)
+            cam.fov[] = curr_fov
+            return
+        end
+        any(endswith(path, e) for e in (".mp4", ".mkv", ".gif")) || (path = path * ".mp4")
+
+        # Render in background directly to the chosen path
+        @async begin
+            try
+                SMPL.record_motion(model, seq, path;
+                                   camera_eye      = curr_eye,
+                                   camera_lookat   = curr_lookat,
+                                   camera_upvector = curr_up,
+                                   camera_fov      = curr_fov)
+            catch e
+                @warn "Export failed" exception=e
+            finally
+                is_exporting[] = false
+                export_btn.label[] = "Export"
+                cam2 = Makie.cameracontrols(scene.scene)
+                Makie.update_cam!(scene.scene, curr_eye, curr_lookat, curr_up)
+                cam2.fov[] = curr_fov
+            end
+        end
+    end
+
+    # Capture: interactive screen recording using colorbuffer from the existing
+    # interactive screen. VideoStream is created from a fresh offscreen scene so
+    # it never touches fig's GL screen — the interactive window stays open.
+    # Click once to start (button turns "■ Stop"), click again to finish and save.
+    is_capturing     = Ref(false)
+    vs_capture       = Ref{Any}(nothing)
+    capture_listener = Ref{Any}(nothing)
+
+    on(capture_btn.clicks) do _
+        if !is_capturing[]
+            try
+                is_capturing[] = true
+                capture_btn.label[] = "■ Stop"
+
+                # Read pixel dimensions from the live screen (JuliaNative → (height, width))
+                int_screen = fig.scene.current_screens[1]
+                h_px, w_px = size(Makie.colorbuffer(int_screen))
+
+                # Fresh offscreen scene — VideoStream won't touch fig's screen
+                enc_scene    = Scene(size = (w_px, h_px))
+                vs_capture[] = Makie.VideoStream(enc_scene;
+                                   framerate = Int(round(seq.fps)), visible = false)
+
+                # Record the current frame immediately (GLNative = rgb24, (w,h))
+                write(vs_capture[].io, Makie.colorbuffer(int_screen, Makie.GLNative))
+
+                # Record one frame each time the player advances
+                capture_listener[] = on(frame_obs) do _
+                    is_capturing[]        || return
+                    isnothing(vs_capture[]) && return
+                    scrs = fig.scene.current_screens
+                    isempty(scrs)         && return
+                    write(vs_capture[].io, Makie.colorbuffer(scrs[1], Makie.GLNative))
+                end
+            catch e
+                @warn "Capture start failed" exception=e
+                is_capturing[] = false
+                capture_btn.label[] = "Capture"
+            end
+
+        else
+            is_capturing[] = false
+            !isnothing(capture_listener[]) && Observables.off(capture_listener[])
+            capture_listener[] = nothing
+
+            vs = vs_capture[]
+            vs_capture[] = nothing
+            if isnothing(vs)
+                capture_btn.label[] = "Capture"
+                return
+            end
+
+            capture_btn.label[] = "Saving..."
+            path = save_file(homedir(); filterlist = "mp4,mkv,gif")
+            if isempty(path)
+                # Discard the stream without blocking the UI thread
+                @async (try close(vs.io); wait(vs.process) catch end)
+                capture_btn.label[] = "Capture"
+                return
+            end
+            any(endswith(path, e) for e in (".mp4", ".mkv", ".gif")) ||
+                (path = path * ".mp4")
+
+            @async begin
+                try
+                    Makie.save(path, vs)
+                catch e
+                    @warn "Capture save failed" exception=e
+                finally
+                    capture_btn.label[] = "Capture"
+                end
+            end
+        end
+    end
 
     display(fig)
     return fig
@@ -477,7 +674,7 @@ function SMPL.viz_motions(model, seqs::AbstractVector{<:SMPL.MotionSequence};
 
     if layout == :sidebyside
         n_panels = N_seq
-        _, scenes, frame_obs, _, _ = _make_player_controls(fig, N_frames, n_panels, rect)
+        _, scenes, frame_obs, _, _, _ = _make_player_controls(fig, N_frames, n_panels, rect)
 
         for k in 1:N_seq
             lbl = k <= length(labels) ? labels[k] : "Motion $k"
@@ -502,7 +699,7 @@ function SMPL.viz_motions(model, seqs::AbstractVector{<:SMPL.MotionSequence};
         end
 
     elseif layout == :overlay
-        _, scenes, frame_obs, _, _ = _make_player_controls(fig, N_frames, 1, rect)
+        _, scenes, frame_obs, _, _, _ = _make_player_controls(fig, N_frames, 1, rect)
         scene = scenes[1]
         _ground_plane!(scene.scene, rect)
         _origin_marker!(scene.scene, rect)

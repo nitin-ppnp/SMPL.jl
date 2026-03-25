@@ -49,13 +49,26 @@ fig = viz_motion(model, seq;
 **Layout:**
 
 ```
-┌──────────────────────────────────────────┐
-│              LScene (3D view)             │
-├──────────┬───────────────────────┬────────┤
-│  ▶ Play  │  ══════════●═════════ │  1.0×  │
-│          │       frame slider    │ speed  │
-└──────────┴───────────────────────┴────────┘
+┌────────────────────────────────────────────────────────────┐
+│                      LScene (3D view)                       │
+├──────────┬────────────────────────┬───────┬──────┬─────────┤
+│ > Play   │  ══════════●═══════════│ 1x ▼  │ Snap │ Export  │ Capture
+│ || Pause │      frame slider      │ speed │      │        │
+└──────────┴────────────────────────┴───────┴──────┴─────────┘
 ```
+
+### Interactive Player Controls
+
+| Control | Behaviour |
+|---------|-----------|
+| **> Play / \|\| Pause** | Starts / pauses playback. Animation loops: the slider resets to frame 1 after the last frame and continues automatically. |
+| **Frame slider** | Scrub to any frame manually; works during Capture recording. |
+| **Speed menu** | Preset playback speeds (0.25×, 0.5×, 1×, 2×, 4×). Select **Custom...** to open a small dialog where any positive value can be entered (e.g. `6.8`). |
+| **Snap** | Captures the current rendered frame and opens a native OS save dialog to choose a `.png` path. The camera angle (zoom, pan, rotation set interactively with the mouse) is preserved after saving. |
+| **Export** | Renders the full sequence headlessly at the **current camera angle** using `record_motion` in a background task. The interactive window stays fully open during rendering. A native save dialog opens when done; supports `.mp4`, `.mkv`, and `.gif`. |
+| **Capture** | Interactive screen recording. Click once to start — one frame is recorded each time the slider advances (via Play or manual scrub). Click **■ Stop** to finalize and save. Useful for capturing specific manual interactions with the timeline. |
+
+> **Tip:** After zooming or rotating the camera interactively, use **Export** to render a clean full-resolution video at that exact camera angle.
 
 **Keywords:**
 - `show_skeleton::Bool` (default `false`) — overlays joint spheres on the mesh
