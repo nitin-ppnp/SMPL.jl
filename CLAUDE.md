@@ -48,7 +48,9 @@ See `.claude/rules/architecture.md` for detailed notes. Key structure:
 |-------|--------|----------|----------|----------|
 | SMPL  | 24     | 6890     | 72       | 10       |
 | SMPLX | 55     | 10475    | 165      | 10       |
-| SUPR  | 75     | 10475    | 228      | 10       |
+| SUPR  | 75     | 10475    | 225      | 10       |
+
+SUPR note: AMASS stores SUPR with 228 = 76×3 pose elements (extra joint appended). `smpl_lbs` accepts both 225 and 228; extra elements beyond 225 are silently ignored.
 
 `smpl_lbs` returns `SMPLOutput` (a struct, not a Dict). Access fields as `out.vertices`, `out.joints`. **The README.md shows outdated Dict-style access — do not use it as a reference.**
 

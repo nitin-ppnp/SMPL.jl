@@ -68,6 +68,9 @@ end
 
 # Post login credentials and stream the response to a local file.
 # Uses HTTP.jl directly (no external wget dependency).
+# Validates that the result is an NPZ/ZIP archive (magic bytes PK\x03\x04);
+# if the server returns an HTML error/login page the file is removed and an
+# informative error is thrown so the user knows to fix their credentials.
 function _download_file(url::String, post_data::String, output_file::String)
     output_dir = dirname(output_file)
     mkpath(output_dir)
@@ -76,9 +79,47 @@ function _download_file(url::String, post_data::String, output_file::String)
             "POST", url,
             ["Content-Type" => "application/x-www-form-urlencoded"],
             post_data;
-            response_stream         = io,
-            redirect                = true,
+            response_stream          = io,
+            redirect                 = true,
             require_ssl_verification = false,
+        )
+    end
+    # NPZ files are ZIP archives — magic bytes are PK\x03\x04 (0x50 0x4b 0x03 0x04).
+    # If the server returned an HTML page (auth failure, wrong URL, etc.) the first
+    # bytes will be '<' or similar.  Catch this early with a clear error message.
+    magic = open(output_file, "r") do io; read(io, 4); end
+    if magic != UInt8[0x50, 0x4b, 0x03, 0x04]
+        rm(output_file; force=true)
+        error(
+            "Downloaded file is not a valid NPZ archive — the server likely returned " *
+            "an HTML authentication error page.\n\n" *
+            "To fix:\n" *
+            "  1. Verify your credentials in credentials.toml (copy from credentials.toml.example).\n" *
+            "  2. Delete the bad cache directory so DataDeps re-downloads:\n" *
+            "       rm -rf ~/.julia/scratchspaces/124859b0-ceae-595e-8997-d05f6a7a8dfe/datadeps/\n" *
+            "  3. Re-run create_smpl_*/create_smplx_*/create_supr_*().\n\n" *
+            "URL attempted: $url"
+        )
+    end
+end
+
+# Validate that a file is an NPZ/ZIP archive (magic bytes PK\x03\x04).
+# Called from create_smpl/smplx/supr before NPZ.npzread so that stale bad
+# files in the DataDeps cache produce an actionable error rather than an
+# opaque "not a NPY or NPZ/Zip file" crash.
+function _assert_valid_npz(path::String)
+    isfile(path) || error("Model file not found: $path")
+    magic = open(path, "r") do io; read(io, 4); end
+    if magic != UInt8[0x50, 0x4b, 0x03, 0x04]
+        rm(path; force=true)
+        error(
+            "Cached model file is not a valid NPZ archive and has been deleted: $path\n\n" *
+            "This usually means the file was downloaded with wrong credentials " *
+            "(the server returned an HTML login page instead of the model).\n\n" *
+            "To fix:\n" *
+            "  1. Check your credentials in credentials.toml.\n" *
+            "  2. Re-run create_smpl_*/create_smplx_*/create_supr_*() — " *
+            "DataDeps will re-download the missing file."
         )
     end
 end
@@ -197,6 +238,7 @@ The returned model is ready for `smpl_lbs`. Move to GPU with
 `Adapt.adapt(CuArray, model)` when CUDA.jl is loaded.
 """
 function create_smpl(model_path::String) :: BodyModel{Float32, Matrix{Float32}}
+    _assert_valid_npz(model_path)
     d = NPZ.npzread(model_path)
 
     # shapedirs in NPZ: (6890, 3, N_b) — reshape to (N_v*3, N_b) for S·β matmul
@@ -266,6 +308,7 @@ Array layout conversions:
   - Same reshape/transpose pattern as `create_smpl`
 """
 function create_smplx(model_path::String) :: BodyModel{Float32, Matrix{Float32}}
+    _assert_valid_npz(model_path)
     d = NPZ.npzread(model_path)
 
     # SMPLX NPZ quirk: root joint's parent entry is a large out-of-range value;
@@ -333,6 +376,7 @@ SUPR-specific preprocessing at load time:
   - `parents`: 0-indexed kintree_table → 1-indexed Int32, all N_j entries
 """
 function create_supr(model_path::String) :: SUPRModel{Float32, Matrix{Float32}}
+    _assert_valid_npz(model_path)
     d = NPZ.npzread(model_path)
 
     N_v    = size(d["v_template"], 1)   # 10475

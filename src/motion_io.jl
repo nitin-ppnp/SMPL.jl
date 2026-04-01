@@ -49,15 +49,16 @@ end
     _infer_model_type(pose_dim) -> Symbol
 
 Infer which body model a flat pose vector belongs to from its dimensionality:
-  72  = SMPL  (24 joints × 3)
-  165 = SMPLX (55 joints × 3)
-  228 = SUPR  (76 joints × 3, including root)
+  72       = SMPL  (24 joints × 3)
+  165      = SMPLX (55 joints × 3)
+  225      = SUPR  (75 joints × 3, canonical model)
+  228      = SUPR  (75 joints × 3 + 1 extra joint × 3 stored by AMASS)
 Anything else is left as :smpl (best-effort).
 """
 function _infer_model_type(pose_dim::Int) :: Symbol
-    pose_dim == 72  && return :smpl
-    pose_dim == 165 && return :smplx
-    pose_dim == 228 && return :supr
+    pose_dim == 72         && return :smpl
+    pose_dim == 165        && return :smplx
+    pose_dim ∈ (225, 228)  && return :supr
     return :smpl
 end
 

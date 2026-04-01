@@ -249,8 +249,10 @@ function smpl_lbs(
     #      are computed from the same axis-angle input θ.
     #      Array(θ) is a no-op on CPU; on GPU it brings θ to CPU so that
     #      rodrigues / quat_feat can access elements without slow scalar indexing.
+    #      θ may be longer than N_j*3: AMASS SUPR files store 228 = 76×3
+    #      elements with an extra joint appended; only the first N_j*3 are used.
     # ------------------------------------------------------------------
-    θ_cpu      = Array(θ)                      # (N_j*3,) on CPU
+    θ_cpu      = Array(θ)[1:N_j*3]            # (N_j*3,) — trim any extra joints
     θ_mat      = reshape(θ_cpu, 3, N_j)        # (3, N_j) — view, no copy
     rot_mats   = zeros(ET, 3, 3, N_j)         # (3, 3, N_j) — local rotations, CPU
     quat_feats = zeros(ET, 4, N_j)            # (4, N_j)  — quaternion features, CPU
